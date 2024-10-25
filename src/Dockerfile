@@ -1,0 +1,21 @@
+# Dockerfile for Server
+
+# Set base image to OpenJDK 19
+FROM openjdk:19-jdk
+
+# Set working directory inside the container
+WORKDIR /app
+
+# Copy Server files from the current directory to the container's working directory
+COPY Server.java /app
+COPY RemoteOperations.java /app
+
+# Expose ports for server and rmiregistry
+EXPOSE 1099 1300
+
+# Compile Server and RemoteOperations files
+RUN javac Server.java RemoteOperations.java
+
+# Run the Server
+CMD ["java", "Server", "127.0.0.1", "1300"]
+

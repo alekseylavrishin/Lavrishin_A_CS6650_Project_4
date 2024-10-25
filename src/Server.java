@@ -167,7 +167,8 @@ public class Server implements RemoteOperations{
             RemoteOperations stub = (RemoteOperations) UnicastRemoteObject.exportObject(srv, port);
 
             // Bind remote object's stub in registry
-            Registry registry = LocateRegistry.getRegistry(); // default port 1099
+            //Registry registry = LocateRegistry.getRegistry(); // default port 1099
+            Registry registry = LocateRegistry.createRegistry(1099); // create registry on port 1099
             registry.bind("RemoteOperations", stub);
             logMessage("Server initialized on host " + System.getProperty("java.rmi.server.hostname") + " port " + port);
         } catch (Exception e) {

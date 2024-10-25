@@ -347,33 +347,6 @@ public class Client {
         testUDP(serverIP, port, "Key2", "Value2", "PUT");
     }
 
-    /**
-     * Asks the user for the communication type they wish to use with the server.
-     * User must enter '1' for TCP or '2' for UDP.
-     * If provided input is not '1' or '2', function will rerun until appropriate input is given.
-     * @param scanner The Scanner used for taking user input from System.in.
-     */
-    public static void askForCommType(Scanner scanner, String serverIP, int port) throws Exception {
-        try {
-            logMessage("Enter '1' to use TCP or enter '2' to use UDP");
-            int selection = scanner.nextInt();
-
-            if (selection == 1) {
-                logMessage("TCP Communication Selected");
-                TCPClient(serverIP, port);
-
-            } else if (selection == 2) {
-                logMessage("UDP Communication Selected");
-                UDPClient(serverIP, port);
-
-            } else { // Rerun if input doesn't match '1' or '2'
-                logMessage("ERROR: Invalid Input");
-                askForCommType(scanner, serverIP, port);
-            }
-        } catch (InputMismatchException e) {
-            logMessage("ERROR: Input mismatch detected: exiting");
-        }
-    }
 
     /**
      * Gets current system time and prints Client output in MM-dd-yyyy HH:mm:ss.SSS format.
@@ -390,6 +363,57 @@ public class Client {
         System.out.println(time + " -- " + message);
     }
 
+    /**
+     * Programmatically tests PUT, GET, DELETE operations on the RMI server.
+     * The test operations are hardcoded in this function.
+     * @param serverIP The IP Address or hostname of the RMI server.
+     * @param stub The reference to the RMI server
+     */
+    public static void testOperations(String serverIP, RemoteOperations stub) throws RemoteException {
+        // Programmatically perform 5 PUT operations
+        PUTOperation("Key1", "Value1", serverIP, stub);
+        PUTOperation("Key2", "Value2", serverIP, stub);
+        PUTOperation("Key3", "Value3", serverIP, stub);
+        PUTOperation("Key4", "Value4", serverIP, stub);
+        PUTOperation("Key5", "Value5", serverIP, stub);
+
+        // Programmatically perform 5 GET operations
+        GETOperation("Key1", serverIP, stub);
+        GETOperation("Key2", serverIP, stub);
+        GETOperation("Key3", serverIP, stub);
+        GETOperation("Key4", serverIP, stub);
+        GETOperation("Key5", serverIP, stub);
+
+        // Programmatically perform 5 DELETE operations
+        DELETEOperation("Key1", serverIP, stub);
+        DELETEOperation("Key2", serverIP, stub);
+        DELETEOperation("Key3", serverIP, stub);
+        DELETEOperation("Key4", serverIP, stub);
+        DELETEOperation("Key5", serverIP, stub);
+
+        // Programmatically populate RMI server with 5 key/value pairs
+        PUTOperation("Key1", "Value1", serverIP, stub);
+        PUTOperation("Key2", "Value2", serverIP, stub);
+        PUTOperation("Key3", "Value3", serverIP, stub);
+        PUTOperation("Key4", "Value4", serverIP, stub);
+        PUTOperation("Key5", "Value5", serverIP, stub);
+    }
+
+    public static void PUTOperation(String key, String value, String serverIP, RemoteOperations stub) throws RemoteException {
+        String result = stub.createRecord(key, value, serverIP);
+        logMessage(result);
+    }
+
+    public static void GETOperation(String key, String serverIP, RemoteOperations stub) throws RemoteException {
+        String result = stub.getRecord(key, serverIP);
+        logMessage(result);
+    }
+
+    public static void DELETEOperation(String key, String serverIP, RemoteOperations stub) throws RemoteException {
+        String result = stub.deleteRecord(key, serverIP);
+        logMessage(result);
+    }
+
     public static void askForOperationType(Scanner scanner, RemoteOperations stub, String serverIP) {
         try {
             System.out.println("Enter '1' to perform PUT");
@@ -404,22 +428,25 @@ public class Client {
                 String key = scanner.nextLine();
                 logMessage("Enter value to PUT: ");
                 String value = scanner.nextLine();
-                String result = stub.createRecord(key, value, serverIP);
-                logMessage(result);
+                /*String result = stub.createRecord(key, value, serverIP);
+                logMessage(result);*/
+                PUTOperation(key, value, serverIP, stub);
 
             } else if(selection == 2) {
                 logMessage("GET operation selected");
                 logMessage("Enter key to GET: ");
                 String key = scanner.nextLine();
-                String result = stub.getRecord(key, serverIP);
-                logMessage(result);
+                /*String result = stub.getRecord(key, serverIP);
+                logMessage(result);*/
+                GETOperation(key, serverIP, stub);
 
             } else if(selection == 3) {
                 logMessage("DELETE operation selected");
                 logMessage("Enter key to DELETE");
                 String key = scanner.nextLine();
-                String result = stub.deleteRecord(key, serverIP);
-                logMessage(result);
+                /*String result = stub.deleteRecord(key, serverIP);
+                logMessage(result);*/
+                DELETEOperation(key, serverIP, stub);
 
             } else { // rerun function if input not '1', '2', or '3'
                 logMessage("Invalid input detected");
@@ -458,6 +485,9 @@ public class Client {
 
             RemoteOperations stub = (RemoteOperations) registry.lookup("RemoteOperations");
             logMessage("Connected to server on host " + stub.getServerIP());
+
+            // Programmatically test GET, PUT, DELETE operations
+            testOperations(serverIP, stub);
 
             // Create scanner for accepting user input
             Scanner scanner = new Scanner(System.in);
