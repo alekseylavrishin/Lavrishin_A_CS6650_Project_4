@@ -2,6 +2,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.*;
+import java.rmi.Naming;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.InputMismatchException;
@@ -403,9 +404,17 @@ public class Client {
             logMessage("ERROR: <server_ip> must be type String and <port> must be type int");
         }
 
-        // Create scanner for accepting user input
+        try {
+            String registryURL = "rmi://localhost:" + port + "/RemoteOperations";
+            RemoteOperations operations = (RemoteOperations) Naming.lookup(registryURL);
+            String result = operations.createRecord();
+        } catch (Exception e) {
+            logMessage("ERROR: " + e.getMessage());
+        }
+
+        /*// Create scanner for accepting user input
         Scanner scanner = new Scanner(System.in);
-        askForCommType(scanner, serverIP, port);
+        askForCommType(scanner, serverIP, port);*/
 
     }
 }

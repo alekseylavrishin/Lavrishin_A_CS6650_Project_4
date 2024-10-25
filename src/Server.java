@@ -2,20 +2,75 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.*;
+import java.rmi.Naming;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+import java.rmi.server.UnicastRemoteObject;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
-public class Server {
+public class Server implements RemoteOperations{
+    private HashMap<String, String> hMap;
 
-    /**
+
+    public Server(HashMap<String, String> hMap) throws RemoteException {
+        this.hMap = hMap;
+    }
+
+    public HashMap<String, String> getHMap() {
+        return this.hMap;
+    }
+
+    public void setHMap(HashMap<String, String> newMap) {
+        this.hMap = newMap;
+    }
+
+
+    @Override
+    public String createRecord() throws RemoteException {
+        // confirm to server that PUT operation is commencing
+        //out.writeUTF("Server initializing PUT operation");
+        /*logMessage("Server initializing PUT operation");
+
+        // Get key from client
+        String key = in.readUTF();
+        //out.writeUTF("Key " + key + " received by server");
+        logMessage(("Key " + key + " received by server"));
+
+        // Get value from client
+        String value = in.readUTF();
+        //out.writeUTF("Value " + value + " received by server");
+        logMessage("Value " + value + " received by server");
+
+        // Write key, value to hMap
+        hMap.put(key, value);
+        //out.writeUTF("Key: " + key + " Value: " +  value + " have been written to the server");
+        logMessage("Key: " + key + " Value: " +  value + " have been written to the server");*/
+        return "createRecord invoked";
+    }
+
+    @Override
+    public String getRecord() throws RemoteException {
+        return "";
+    }
+
+
+    @Override
+    public String deleteRecord() throws RemoteException {
+        return "";
+    }
+
+
+   /* *//**
      * Used to communicate with TCPClient to perform PUT, GET, DELETE operations over TCP protocol.
      * @param serverIP The IP Address or hostname the server will be hosted on.
      * @param port The port the server will listen on.
      * @param hMap The HashMap used to store and perform operations on Key, Value pairs specified by the TCPClient.
-     */
+     *//*
     public static void TCPServer(String serverIP, int port, HashMap<String, String> hMap) {
 
         try {
@@ -122,12 +177,12 @@ public class Server {
 
     }
 
-    /**
+    *//**
      * Used to communicate with UDPClient to perform PUT, GET, DELETE operations over UDP protocol.
      * @param serverIP The IP Address or hostname the server will be hosted on.
      * @param port The port the server will listen on.
      * @param hMap The HashMap used to store and perform operations on Key, Value pairs specified by the UDPClient.
-     */
+     *//*
     public static void UDPServer(String serverIP, int port, HashMap<String, String> hMap) {
         DatagramSocket s = null;
         try {
@@ -221,12 +276,12 @@ public class Server {
         }
     }
 
-    /**
+    *//**
      * Asks the user for the communication type they wish to use with the server.
      * User must enter '1' for TCP or '2' for UDP.
      * If provided input is not '1' or '2', function will rerun until appropriate input is given.
      * @param scanner The Scanner used for taking user input from System.in.
-     */
+     *//*
     public static void askForCommType(Scanner scanner, String serverIP, int port, HashMap<String,String> hMap) {
         try {
             System.out.println("Enter '1' to use TCP or enter '2' to use UDP");
@@ -248,7 +303,7 @@ public class Server {
             logMessage("Input mismatch detected: exiting");
         }
     }
-
+*/
     /**
      * Gets current system time and prints Client output in MM-dd-yyyy HH:mm:ss.SSS format.
      * @param message The message to be printed.
@@ -265,7 +320,7 @@ public class Server {
     }
 
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws RemoteException {
         if(args.length != 2){
             logMessage("Proper input format must be 'java Server.java <server_ip> <port>'");
             return;
@@ -285,9 +340,26 @@ public class Server {
             logMessage("<server_ip> must be type String and <port> must be type int");
         }
 
-        // Create scanner for selecting TCP or UDP
+
+        try {
+            // Create remote object providing RMI service
+            Server srv = new Server(hMap);
+            // Export srv to Java RMI runtime to accept incoming RMI calls
+            RemoteOperations stub = (RemoteOperations) UnicastRemoteObject.exportObject(srv, port);
+
+            // Bind remote object's stub in registry
+            //Registry registry = LocateRegistry.getRegistry(); // default port 1099
+            Registry registry = LocateRegistry.createRegistry(1099);
+            registry.rebind("RemoteOperations", stub);
+            logMessage("Server initialized");
+        } catch (Exception e) {
+            logMessage("ERROR: " + e.getMessage());
+        }
+
+        /*// Create scanner for selecting TCP or UDP
         Scanner scanner = new Scanner(System.in);
-        askForCommType(scanner, serverIP, port, hMap);
+        askForCommType(scanner, serverIP, port, hMap);*/
 
     }
+
 }
