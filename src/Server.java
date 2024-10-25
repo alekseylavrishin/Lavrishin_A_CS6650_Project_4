@@ -31,37 +31,58 @@ public class Server implements RemoteOperations{
 
 
     @Override
-    public String createRecord() throws RemoteException {
-        // confirm to server that PUT operation is commencing
-        //out.writeUTF("Server initializing PUT operation");
-        /*logMessage("Server initializing PUT operation");
+    public String createRecord(String key, String value) throws RemoteException {
+        logMessage("Server initializing PUT operation");
 
-        // Get key from client
-        String key = in.readUTF();
-        //out.writeUTF("Key " + key + " received by server");
         logMessage(("Key " + key + " received by server"));
 
         // Get value from client
-        String value = in.readUTF();
-        //out.writeUTF("Value " + value + " received by server");
         logMessage("Value " + value + " received by server");
 
         // Write key, value to hMap
         hMap.put(key, value);
-        //out.writeUTF("Key: " + key + " Value: " +  value + " have been written to the server");
-        logMessage("Key: " + key + " Value: " +  value + " have been written to the server");*/
-        return "createRecord invoked";
+        logMessage("Key: " + key + " Value: " +  value + " have been written to the server");
+        return "Key: " + key + " Value: " +  value + " have been written to the server";
     }
 
     @Override
-    public String getRecord() throws RemoteException {
-        return "";
+    public String getRecord(String key) throws RemoteException {
+        String result = "";
+        logMessage("Server initializing GET operation");
+        logMessage(("Key " + key + " received by server"));
+
+        if(hMap.containsKey(key)) {
+            // Return value to client
+            String value = hMap.get(key);
+            result = "Value for " + key + ": " + value;
+        } else { // If key cannot be found in hMap
+            // Return 'cannot be found' message to client
+            result = "Key " + key + " cannot be found";
+        }
+        logMessage(result);
+        return result;
     }
 
 
     @Override
-    public String deleteRecord() throws RemoteException {
-        return "";
+    public String deleteRecord(String key) throws RemoteException {
+        String result = "";
+        // confirm to server that DELETE operation is commencing
+        logMessage("Server initializing DELETE operation");
+
+        logMessage("Key " + key + " received by server");
+
+        if (hMap.containsKey(key)) {
+            // If key exists, delete key from hMap
+            hMap.remove(key);
+            result = "Key " + key + " deleted from server";
+        } else {
+            // If key is not found in server
+            result = "Key " + key + " cannot be found in server";
+
+        }
+        logMessage(result);
+        return result;
     }
 
 
@@ -342,16 +363,17 @@ public class Server implements RemoteOperations{
 
 
         try {
+            // Set server IP to specified value
+            System.setProperty("java.rmi.server.hostname", serverIP);
             // Create remote object providing RMI service
             Server srv = new Server(hMap);
-            // Export srv to Java RMI runtime to accept incoming RMI calls
+            // Export srv to Java RMI runtime to accept incoming RMI calls on specified port
             RemoteOperations stub = (RemoteOperations) UnicastRemoteObject.exportObject(srv, port);
 
             // Bind remote object's stub in registry
-            //Registry registry = LocateRegistry.getRegistry(); // default port 1099
-            Registry registry = LocateRegistry.createRegistry(1099);
-            registry.rebind("RemoteOperations", stub);
-            logMessage("Server initialized");
+            Registry registry = LocateRegistry.getRegistry(); // default port 1099
+            registry.bind("RemoteOperations", stub);
+            logMessage("Server initialized on host " + System.getProperty("java.rmi.server.hostname") + " port " + port);
         } catch (Exception e) {
             logMessage("ERROR: " + e.getMessage());
         }

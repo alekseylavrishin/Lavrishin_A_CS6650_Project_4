@@ -7,7 +7,7 @@ import java.util.HashMap;
  *  for use with the Remote Procedure Call functionality of the client/server program.
  */
 public interface RemoteOperations extends Remote {
-    String createRecord() throws RemoteException;
-    String getRecord() throws RemoteException;
-    String deleteRecord() throws RemoteException;
+    String createRecord(String key, String value) throws RemoteException;
+    String getRecord(String key) throws RemoteException;
+    String deleteRecord(String key) throws RemoteException;
 }

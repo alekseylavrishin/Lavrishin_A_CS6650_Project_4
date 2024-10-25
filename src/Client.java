@@ -3,6 +3,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.*;
 import java.rmi.Naming;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.InputMismatchException;
@@ -387,6 +390,49 @@ public class Client {
         System.out.println(time + " -- " + message);
     }
 
+    public static void askForOperationType(Scanner scanner, RemoteOperations stub) {
+        try {
+            System.out.println("Enter '1' to perform PUT");
+            System.out.println("Enter '2' to perform GET");
+            System.out.println("Enter '3' to perform DELETE");
+            int selection = scanner.nextInt();
+            scanner.nextLine(); // deal with \n left by scanner.nextInt()
+
+            if(selection == 1) {
+                logMessage("PUT operation selected");
+                logMessage("Enter key to PUT: ");
+                String key = scanner.nextLine();
+                logMessage("Enter value to PUT: ");
+                String value = scanner.nextLine();
+                String result = stub.createRecord(key, value);
+                logMessage(result);
+
+            } else if(selection == 2) {
+                logMessage("GET operation selected");
+                logMessage("Enter key to GET: ");
+                String key = scanner.nextLine();
+                String result = stub.getRecord(key);
+                logMessage(result);
+
+            } else if(selection == 3) {
+                logMessage("DELETE operation selected");
+                logMessage("Enter key to DELETE");
+                String key = scanner.nextLine();
+                String result = stub.deleteRecord(key);
+                logMessage(result);
+
+            } else { // rerun function if input not '1', '2', or '3'
+                logMessage("Invalid input detected");
+                askForOperationType(scanner, stub);
+            }
+
+        } catch (InputMismatchException e) {
+            logMessage("ERROR: Input mismatch detected: exiting");
+        } catch (RemoteException e) {
+            logMessage("ERROR: " + e.getMessage());
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         if (args.length != 2){ // Check that 2 args are provided
             logMessage("ERROR: Proper input format must be 'java Client.java <server_ip> <port>'");
@@ -405,16 +451,27 @@ public class Client {
         }
 
         try {
-            String registryURL = "rmi://localhost:" + port + "/RemoteOperations";
+            /*String registryURL = "rmi://" + serverIP +  ":" + port + "/RemoteOperations";
             RemoteOperations operations = (RemoteOperations) Naming.lookup(registryURL);
-            String result = operations.createRecord();
+            String result = operations.createRecord();*/
+            Registry registry = LocateRegistry.getRegistry(serverIP);
+
+            RemoteOperations stub = (RemoteOperations) registry.lookup("RemoteOperations");
+            logMessage("Connected to server on ");
+
+            /*String result = stub.createRecord();
+            logMessage(result);*/
+            // Create scanner for accepting user input
+            Scanner scanner = new Scanner(System.in);
+            askForOperationType(scanner, stub);
         } catch (Exception e) {
             logMessage("ERROR: " + e.getMessage());
         }
 
-        /*// Create scanner for accepting user input
-        Scanner scanner = new Scanner(System.in);
-        askForCommType(scanner, serverIP, port);*/
+        // Create scanner for accepting user input
+        //Scanner scanner = new Scanner(System.in);
+        //askForCommType(scanner, serverIP, port);
+
 
     }
 }
