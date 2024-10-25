@@ -29,27 +29,43 @@ public class Server implements RemoteOperations{
         this.hMap = newMap;
     }
 
-
+    /**
+     * Creates a new record in the Server's hashmap.
+     * @param key The key of the record.
+     * @param value The value corresponding to the above key.
+     * @param serverIP The IP address or hostname of the client corresponding to this transaction.
+     * @return A String confirming the creation of the record.
+     * @throws RemoteException
+     */
     @Override
-    public String createRecord(String key, String value) throws RemoteException {
-        logMessage("Server initializing PUT operation");
-
-        logMessage(("Key " + key + " received by server"));
+    public String createRecord(String key, String value, String serverIP) throws RemoteException {
+        logMessage("Connected to Client on " + serverIP);
+        logMessage("Client: " + serverIP + " - Server initializing PUT operation");
+        logMessage(("Client: " + serverIP + " - Key " + key + " received by server"));
 
         // Get value from client
-        logMessage("Value " + value + " received by server");
+        logMessage("Client: " + serverIP + " - Value " + value + " received by server");
 
         // Write key, value to hMap
         hMap.put(key, value);
-        logMessage("Key: " + key + " Value: " +  value + " have been written to the server");
+        logMessage("Client: " + serverIP + " - Key: " + key + " Value: " +  value + " have been written to the server");
+        logMessage("Connection closed to " + serverIP);
         return "Key: " + key + " Value: " +  value + " have been written to the server";
     }
 
+    /**
+     * Returns the value of an existing record stored in the Server's hashmap.
+     * @param key The key of the record to be returned.
+     * @param serverIP The IP address or hostname of the client corresponding to this transaction.
+     * @return A String containing either the value of the corresponding key or a "cannot be found"
+     *   message if the key is invalid.
+     * @throws RemoteException
+     */
     @Override
-    public String getRecord(String key) throws RemoteException {
+    public String getRecord(String key, String serverIP) throws RemoteException {
         String result = "";
-        logMessage("Server initializing GET operation");
-        logMessage(("Key " + key + " received by server"));
+        logMessage("Client: " + serverIP + " - Server initializing GET operation");
+        logMessage(("Client: " + serverIP + " - Key " + key + " received by server"));
 
         if(hMap.containsKey(key)) {
             // Return value to client
@@ -59,18 +75,27 @@ public class Server implements RemoteOperations{
             // Return 'cannot be found' message to client
             result = "Key " + key + " cannot be found";
         }
-        logMessage(result);
+        logMessage("Client: " + serverIP + " - " + result);
+        logMessage("Connection closed to " + serverIP);
         return result;
     }
 
-
+    /**
+     * Deletes an existing record stored in the server's hashmap.
+     * If a record doesn't exist, returns "cannot be found" message.
+     * @param key The key of the record to be deleted
+     * @param serverIP The IP address or hostname of the client corresponding to this transaction.
+     * @return A String containing either the confirmation of deletion or
+     *   a "cannot be found" message if key is invalid.
+     * @throws RemoteException
+     */
     @Override
-    public String deleteRecord(String key) throws RemoteException {
+    public String deleteRecord(String key, String serverIP) throws RemoteException {
         String result = "";
         // confirm to server that DELETE operation is commencing
-        logMessage("Server initializing DELETE operation");
+        logMessage("Client: " + serverIP + " Server initializing DELETE operation");
 
-        logMessage("Key " + key + " received by server");
+        logMessage("Client: " + serverIP + " Key " + key + " received by server");
 
         if (hMap.containsKey(key)) {
             // If key exists, delete key from hMap
@@ -81,250 +106,21 @@ public class Server implements RemoteOperations{
             result = "Key " + key + " cannot be found in server";
 
         }
-        logMessage(result);
+        logMessage("Client: " + serverIP + "- " + result);
+        logMessage("Connection closed to " + serverIP);
         return result;
     }
 
-
-   /* *//**
-     * Used to communicate with TCPClient to perform PUT, GET, DELETE operations over TCP protocol.
-     * @param serverIP The IP Address or hostname the server will be hosted on.
-     * @param port The port the server will listen on.
-     * @param hMap The HashMap used to store and perform operations on Key, Value pairs specified by the TCPClient.
-     *//*
-    public static void TCPServer(String serverIP, int port, HashMap<String, String> hMap) {
-
-        try {
-            // Translate String IP or hostname to InetAddress type
-            InetAddress ip = InetAddress.getByName(serverIP);
-
-            ServerSocket listenSocket = new ServerSocket(port, 50, ip);
-            logMessage("Server listening on IP " + ip + " port " + port);
-
-            while(true) { // Server listens until ctrl-c is pressed or exception occurs
-                // Look for and accept single incoming connection
-                Socket clientSocket = listenSocket.accept();
-                logMessage("Connection accepted on IP " + ip + " port " + port + " over TCP");
-
-                DataInputStream in = new DataInputStream(clientSocket.getInputStream());
-                DataOutputStream out = new DataOutputStream(clientSocket.getOutputStream());
-
-                try {
-                    // listen for type of operation: PUT, GET, DELETE
-                    String operation = in.readUTF();
-
-                    logMessage("Received " + operation + " request from " + ip + " port " + port);
-
-                    if(operation.equals("PUT")){
-                        // confirm to server that PUT operation is commencing
-                        out.writeUTF("Server initializing PUT operation");
-                        logMessage("Server initializing PUT operation");
-
-                        // Get key from client
-                        String key = in.readUTF();
-                        out.writeUTF("Key " + key + " received by server");
-                        logMessage(("Key " + key + " received by server"));
-
-                        // Get value from client
-                        String value = in.readUTF();
-                        out.writeUTF("Value " + value + " received by server");
-                        logMessage("Value " + value + " received by server");
-
-                        // Write key, value to hMap
-                        hMap.put(key, value);
-                        out.writeUTF("Key: " + key + " Value: " +  value + " have been written to the server");
-                        logMessage("Key: " + key + " Value: " +  value + " have been written to the server");
-
-                    } else if(operation.equals("GET")) {
-                        // confirm to server that GET operation is commencing
-                        out.writeUTF("Server initializing GET operation");
-                        logMessage("Server initializing GET operation");
-
-                        String key = in.readUTF();
-                        out.writeUTF("Key " + key + " received by server");
-                        logMessage(("Key " + key + " received by server"));
-
-                        if(hMap.containsKey(key)) {
-                            // Return value to client
-                            String value = hMap.get(key);
-                            out.writeUTF("Value for " + key + ": " + value);
-                            logMessage("Value for " + key + ": " + value);
-
-                        } else { // If key cannot be found in hMap
-                            // Return 'cannot be found' message to client
-                            out.writeUTF("Key " + key + " cannot be found");
-                            logMessage("Key " + key + " cannot be found");
-
-                        }
-
-                    } else if(operation.equals("DELETE")) {
-                        // confirm to server that DELETE operation is commencing
-                        out.writeUTF("Server initializing DELETE operation");
-                        logMessage("Server initializing DELETE operation");
-
-                        String key = in.readUTF();
-                        out.writeUTF("Key " + key + " received by server");
-                        logMessage("Key " + key + " received by server");
-
-                        if(hMap.containsKey(key)) {
-                            // If key exists, delete key from hMap
-                            hMap.remove(key);
-                            out.writeUTF("Key " + key + " deleted from server");
-                            logMessage("Key " + key + " deleted from server");
-                        } else {
-                            // If key is not found in server
-                            out.writeUTF("Key " + key +  " cannot be found in server");
-                            logMessage("Key " + key +  " cannot be found in server");
-                        }
-
-                    } else {
-                        // Faulty operation provided, send back error message
-                        out.writeUTF("SERVER ERROR: Faulty operation detected");
-                        logMessage("SERVER ERROR: Faulty operation detected");
-                    }
-
-                } catch (Exception e) {
-                    logMessage("Error handling client request: " + e.getMessage());
-                } finally {
-                    clientSocket.close();
-                    logMessage("Client connection to" + ip + " " + port + " closed");
-                }
-            }
-        } catch (UnknownHostException e) {
-            logMessage("UnknownHostException: " + e.getMessage());
-        } catch (IOException e) {
-            logMessage("RuntimeException " + e.getMessage());
-        }
-
+    /**
+     * Returns the IP Address or hostname the Server is running on.
+     * @return The IP or hostname the Server is using.
+     * @throws RemoteException
+     */
+    @Override
+    public String getServerIP() throws RemoteException{
+        return System.getProperty("java.rmi.server.hostname");
     }
 
-    *//**
-     * Used to communicate with UDPClient to perform PUT, GET, DELETE operations over UDP protocol.
-     * @param serverIP The IP Address or hostname the server will be hosted on.
-     * @param port The port the server will listen on.
-     * @param hMap The HashMap used to store and perform operations on Key, Value pairs specified by the UDPClient.
-     *//*
-    public static void UDPServer(String serverIP, int port, HashMap<String, String> hMap) {
-        DatagramSocket s = null;
-        try {
-            String val;
-            byte[] byteResponse;
-
-            // Translate String IP or hostname to InetAddress type
-            InetAddress ip = InetAddress.getByName(serverIP);
-
-            // Create new socket at provided port and InetAddress
-            s = new DatagramSocket(port, ip);
-
-            byte[] buffer = new byte[1024];
-            while(true) { // Server listens until ctrl-c is pressed or exception occurs
-
-                // Get type of incoming request from client
-                DatagramPacket typePacket = new DatagramPacket(buffer, buffer.length);
-                s.receive(typePacket); // Get type of request
-                String typeMsg = new String(typePacket.getData(), 0, typePacket.getLength());
-
-                logMessage("Connection accepted on IP " + ip + "port " + port + " over UDP");
-                logMessage("Received " + typeMsg + " request from " + typePacket.getAddress() + " port " + typePacket.getPort());
-
-                // Get key from client
-                DatagramPacket keyPacket = new DatagramPacket(buffer, buffer.length);
-                s.receive(keyPacket); // Get type of request
-                String keyMsg = new String(keyPacket.getData(), 0, keyPacket.getLength());
-
-                logMessage("Key " + keyMsg + "from " + typePacket.getAddress() + " port " +
-                        typePacket.getPort() + " received by the server");
-
-                if(typeMsg.equals("PUT")) {
-                    // If operation is PUT, retrieve value
-                    DatagramPacket valPacket = new DatagramPacket(buffer, buffer.length);
-                    s.receive(valPacket);
-                    String valMsg = new String(valPacket.getData(), 0, valPacket.getLength());
-                    logMessage("Value " + valMsg + "from " + typePacket.getAddress() + " port " +
-                            typePacket.getPort() + " received by the server");
-
-                    hMap.put(keyMsg, valMsg);
-
-                    logMessage("Key: " + keyMsg + " Value: " +  valMsg + " have been written to the server");
-
-                    // Send confirmation to client of successful operation
-                    byteResponse = ("Entry for " + keyMsg + " successfully created").getBytes();
-                    DatagramPacket response = new DatagramPacket(byteResponse, byteResponse.length,
-                            typePacket.getAddress(), typePacket.getPort());
-                    s.send(response);
-
-                } else if (typeMsg.equals("GET")) {
-                    if(hMap.containsKey(keyMsg)) { // if key exists, return value
-                        val = "Value for " + keyMsg + ": " + hMap.get(keyMsg);
-                    } else { // Else return 'cannot be found' message
-                        val = ("Key " + keyMsg + " cannot be found in server");
-                    }
-                    logMessage(val);
-                    byteResponse = val.getBytes();
-                    DatagramPacket response = new DatagramPacket(byteResponse, byteResponse.length,
-                            typePacket.getAddress(), typePacket.getPort());
-                    s.send(response);
-
-                } else if(typeMsg.equals("DELETE")) {
-                    if(hMap.containsKey(keyMsg)) { // if key exists, return value
-                        hMap.remove(keyMsg);
-                        val = "Key " + keyMsg + " deleted from server";
-
-                    } else { // Else return 'cannot be found' message
-                        val = ("Key " + keyMsg + " cannot be found in server");
-
-                    }
-                    logMessage(val);
-                    byteResponse = val.getBytes();
-                    DatagramPacket response = new DatagramPacket(byteResponse, byteResponse.length,
-                            typePacket.getAddress(), typePacket.getPort());
-                    s.send(response);
-
-                } else {
-                    // Faulty operation provided
-                    logMessage("SERVER ERROR: Faulty operation detected");
-                    byteResponse = "SERVER ERROR: Faulty operation detected".getBytes();
-                    DatagramPacket response = new DatagramPacket(byteResponse, byteResponse.length,
-                            typePacket.getAddress(), typePacket.getPort());
-                    s.send(response);
-                }
-            }
-
-        } catch (SocketException e) {
-            logMessage(e.getMessage());
-        } catch (IOException e) {
-            logMessage(e.getMessage());
-        }
-    }
-
-    *//**
-     * Asks the user for the communication type they wish to use with the server.
-     * User must enter '1' for TCP or '2' for UDP.
-     * If provided input is not '1' or '2', function will rerun until appropriate input is given.
-     * @param scanner The Scanner used for taking user input from System.in.
-     *//*
-    public static void askForCommType(Scanner scanner, String serverIP, int port, HashMap<String,String> hMap) {
-        try {
-            System.out.println("Enter '1' to use TCP or enter '2' to use UDP");
-            int selection = scanner.nextInt();
-
-            if (selection == 1) {
-                logMessage("TCP Communication Selected");
-                TCPServer(serverIP, port, hMap);
-
-            } else if (selection == 2) {
-                logMessage("UDP Communication Selected");
-                UDPServer(serverIP, port, hMap);
-
-            } else { // Rerun if input doesn't match '1' or '2'
-                logMessage("Invalid Input");
-                askForCommType(scanner, serverIP, port, hMap);
-            }
-        } catch (InputMismatchException e) {
-            logMessage("Input mismatch detected: exiting");
-        }
-    }
-*/
     /**
      * Gets current system time and prints Client output in MM-dd-yyyy HH:mm:ss.SSS format.
      * @param message The message to be printed.
@@ -377,10 +173,6 @@ public class Server implements RemoteOperations{
         } catch (Exception e) {
             logMessage("ERROR: " + e.getMessage());
         }
-
-        /*// Create scanner for selecting TCP or UDP
-        Scanner scanner = new Scanner(System.in);
-        askForCommType(scanner, serverIP, port, hMap);*/
 
     }
 

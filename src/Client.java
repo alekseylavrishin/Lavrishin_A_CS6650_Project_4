@@ -390,7 +390,7 @@ public class Client {
         System.out.println(time + " -- " + message);
     }
 
-    public static void askForOperationType(Scanner scanner, RemoteOperations stub) {
+    public static void askForOperationType(Scanner scanner, RemoteOperations stub, String serverIP) {
         try {
             System.out.println("Enter '1' to perform PUT");
             System.out.println("Enter '2' to perform GET");
@@ -404,26 +404,26 @@ public class Client {
                 String key = scanner.nextLine();
                 logMessage("Enter value to PUT: ");
                 String value = scanner.nextLine();
-                String result = stub.createRecord(key, value);
+                String result = stub.createRecord(key, value, serverIP);
                 logMessage(result);
 
             } else if(selection == 2) {
                 logMessage("GET operation selected");
                 logMessage("Enter key to GET: ");
                 String key = scanner.nextLine();
-                String result = stub.getRecord(key);
+                String result = stub.getRecord(key, serverIP);
                 logMessage(result);
 
             } else if(selection == 3) {
                 logMessage("DELETE operation selected");
                 logMessage("Enter key to DELETE");
                 String key = scanner.nextLine();
-                String result = stub.deleteRecord(key);
+                String result = stub.deleteRecord(key, serverIP);
                 logMessage(result);
 
             } else { // rerun function if input not '1', '2', or '3'
                 logMessage("Invalid input detected");
-                askForOperationType(scanner, stub);
+                askForOperationType(scanner, stub, serverIP);
             }
 
         } catch (InputMismatchException e) {
@@ -457,21 +457,14 @@ public class Client {
             Registry registry = LocateRegistry.getRegistry(serverIP);
 
             RemoteOperations stub = (RemoteOperations) registry.lookup("RemoteOperations");
-            logMessage("Connected to server on ");
+            logMessage("Connected to server on host " + stub.getServerIP());
 
-            /*String result = stub.createRecord();
-            logMessage(result);*/
             // Create scanner for accepting user input
             Scanner scanner = new Scanner(System.in);
-            askForOperationType(scanner, stub);
+            askForOperationType(scanner, stub, serverIP);
+
         } catch (Exception e) {
             logMessage("ERROR: " + e.getMessage());
         }
-
-        // Create scanner for accepting user input
-        //Scanner scanner = new Scanner(System.in);
-        //askForCommType(scanner, serverIP, port);
-
-
     }
 }
