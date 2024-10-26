@@ -22,11 +22,11 @@ It's possible to run the Client and Server locally, as opposed to using Docker.
 To run this locally:
 
 1. In Server.java:
-   * Uncomment line 178
-   * Comment Out line 181
+   * Uncomment line 174
+   * Comment Out line 177
 2. In Client.java
-   * Uncomment line 179
-   * Comment Out line 182
+   * Uncomment line 174
+   * Comment Out line 177
 3. Open a terminal window and run the following commands in the src/ directory:
    * $ javac *.java
    * $ java Server 127.0.0.1 1300

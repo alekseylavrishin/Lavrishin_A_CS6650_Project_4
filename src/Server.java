@@ -5,6 +5,7 @@ import java.rmi.server.UnicastRemoteObject;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -13,10 +14,11 @@ import java.util.HashMap;
  *   PUT, GET, DELETE operations over key/value pairs stored on the Server.
  */
 public class Server implements RemoteOperations{
-    private HashMap<String, String> hMap;
+    private ConcurrentHashMap<String, String> hMap;
+    //private HashMap<String, String> hMap;
 
 
-    public Server(HashMap<String, String> hMap) throws RemoteException {
+    public Server(ConcurrentHashMap<String, String> hMap) throws RemoteException {
         this.hMap = hMap;
     }
 
@@ -24,7 +26,7 @@ public class Server implements RemoteOperations{
      * Getter for this.hMap
      * @return The HashMap used by the server.
      */
-    public HashMap<String, String> getHMap() {
+    public ConcurrentHashMap<String, String> getHMap() {
         return this.hMap;
     }
 
@@ -32,7 +34,7 @@ public class Server implements RemoteOperations{
      * Setter for this.hMap.
      * @param newMap The new HashMap to be used by the server.
      */
-    public void setHMap(HashMap<String, String> newMap) {
+    public void setHMap(ConcurrentHashMap<String, String> newMap) {
         this.hMap = newMap;
     }
 
@@ -154,7 +156,7 @@ public class Server implements RemoteOperations{
         int port = -1;
 
         // Stores all keys, values provided by client
-        HashMap<String, String> hMap = new HashMap<>();
+        ConcurrentHashMap<String, String> hMap = new ConcurrentHashMap<>();
 
         try {
             serverIP = args[0];
