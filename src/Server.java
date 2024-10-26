@@ -21,10 +21,18 @@ public class Server implements RemoteOperations{
         this.hMap = hMap;
     }
 
+    /**
+     * Getter for this.hMap
+     * @return The HashMap used by the server.
+     */
     public HashMap<String, String> getHMap() {
         return this.hMap;
     }
 
+    /**
+     * Setter for this.hMap.
+     * @param newMap The new HashMap to be used by the server.
+     */
     public void setHMap(HashMap<String, String> newMap) {
         this.hMap = newMap;
     }
@@ -160,15 +168,23 @@ public class Server implements RemoteOperations{
 
         try {
             // Set server IP to specified value
-            System.setProperty("java.rmi.server.hostname", serverIP);
+
+            // **** Uncomment to run in local terminal ****
+            //System.setProperty("java.rmi.server.hostname", serverIP);
+
+            // **** Comment out to run in local terminal ****
+            System.setProperty("java.rmi.server.hostname", "rmi-server");
+
+
             // Create remote object providing RMI service
             Server srv = new Server(hMap);
             // Export srv to Java RMI runtime to accept incoming RMI calls on specified port
             RemoteOperations stub = (RemoteOperations) UnicastRemoteObject.exportObject(srv, port);
 
-            // Bind remote object's stub in registry
-            //Registry registry = LocateRegistry.getRegistry(); // default port 1099
-            Registry registry = LocateRegistry.createRegistry(1099); // create registry on port 1099
+            // Create registry on port 1099
+            Registry registry = LocateRegistry.createRegistry(1099);
+
+            // Bind server reference to registry for client accessibility
             registry.bind("RemoteOperations", stub);
             logMessage("Server initialized on host " + System.getProperty("java.rmi.server.hostname") + " port " + port);
         } catch (Exception e) {
