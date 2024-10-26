@@ -1,8 +1,3 @@
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.net.*;
-import java.rmi.Naming;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
@@ -113,9 +108,9 @@ public class Client {
      * Gathers necessary key/value information and passes it to the respective
      *   GET/PUT/DELETEOperation functions.
      * User enters '1' for PUT, '2' for GET, '3' for DELETE.
-     * @param scanner
-     * @param stub
-     * @param serverIP
+     * @param scanner Gets command line input from user.
+     * @param stub The reference to the RMI server.
+     * @param serverIP The IP Address or hostname of the server.
      */
     public static void askForOperationType(Scanner scanner, RemoteOperations stub, String serverIP) {
         try {

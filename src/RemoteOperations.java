@@ -1,6 +1,5 @@
 import java.rmi.Remote;
 import java.rmi.RemoteException;
-import java.util.HashMap;
 
 /**
  * Remote Interface which declares the necessary remote methods
