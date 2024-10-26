@@ -11,6 +11,10 @@ import java.util.Date;
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
+/**
+ * Client interacts with the Java RMI server to perform PUT, GET, DELETE operations
+ *   over key/value pairs stored on the Server.
+ */
 public class Client {
 
     /**

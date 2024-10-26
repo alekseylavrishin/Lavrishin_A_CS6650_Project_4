@@ -13,6 +13,11 @@ import java.util.HashMap;
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
+/**
+ * Java RMI Server implementing the RemoteOperations interface.
+ * Communicates with the Client using Remote Method invocation to perform
+ *   PUT, GET, DELETE operations over key/value pairs stored on the Server.
+ */
 public class Server implements RemoteOperations{
     private HashMap<String, String> hMap;
 
