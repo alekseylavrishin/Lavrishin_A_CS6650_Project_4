@@ -13,6 +13,7 @@
 
 4. The server will stay operational until explicitly shut down, whereas the client will shut down after the completion of an operation.
 5. To run the client again, use $ docker start -ai rmi-client
+6. To restart the server, use $ docker start rmi-server
 
 The reason for stopping the client after running docker compose is that docker compose launches containers in detached mode, causing them to run as a background service and not allowing for interaction via the terminal. 
 
