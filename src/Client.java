@@ -174,7 +174,15 @@ public class Client {
             //Registry registry = LocateRegistry.getRegistry(serverIP);
 
             // **** Comment out to run in local terminal ****
-            Registry registry = LocateRegistry.getRegistry("rmi-server", 1099);
+
+            String[] serverNames = {"rmi-server-1", "rmi-server-2", "rmi-server-3", "rmi-server-4", "rmi-server-5"};
+            // Create scanner for accepting user input
+            Scanner scanner = new Scanner(System.in);
+            System.out.println("Enter number of server to access");
+            int selection = scanner.nextInt();
+            scanner.nextLine();
+            //Registry registry = LocateRegistry.getRegistry("rmi-server", 1099);
+            Registry registry = LocateRegistry.getRegistry(serverNames[selection], 1099);
 
             RemoteOperations stub = (RemoteOperations) registry.lookup("RemoteOperations");
             logMessage("Connected to server on host " + stub.getServerIP());
@@ -182,8 +190,7 @@ public class Client {
             // Programmatically test GET, PUT, DELETE operations
             testOperations(serverIP, stub);
 
-            // Create scanner for accepting user input
-            Scanner scanner = new Scanner(System.in);
+
             askForOperationType(scanner, stub, serverIP);
 
         } catch (Exception e) {

@@ -147,13 +147,14 @@ public class Server implements RemoteOperations{
 
 
     public static void main(String[] args) throws RemoteException {
-        if(args.length != 2){
-            logMessage("Proper input format must be 'java Server.java <server_ip> <port>'");
+        if(args.length != 3){
+            logMessage("Proper input format must be 'java Server.java <server_ip> <port> <server_name>'");
             return;
         }
 
         String serverIP = null;
         int port = -1;
+        String serverName = null;
 
         // Stores all keys, values provided by client
         ConcurrentHashMap<String, String> hMap = new ConcurrentHashMap<>();
@@ -161,9 +162,10 @@ public class Server implements RemoteOperations{
         try {
             serverIP = args[0];
             port = Integer.parseInt(args[1]);
+            serverName = args[2];
 
         } catch (Exception e) {
-            logMessage("<server_ip> must be type String and <port> must be type int");
+            logMessage("<server_ip> and <server_name> must be type String and <port> must be type int");
         }
 
 
@@ -174,9 +176,10 @@ public class Server implements RemoteOperations{
             //System.setProperty("java.rmi.server.hostname", serverIP);
 
             // **** Comment out to run in local terminal ****
-            System.setProperty("java.rmi.server.hostname", "rmi-server");
+            //System.setProperty("java.rmi.server.hostname", "rmi-server");
 
-
+            // Set hostname to the SERVER_NAME env variable stored in the docker-compose file
+            System.setProperty("java.rmi.server.hostname", System.getenv("SERVER_NAME"));
             // Create remote object providing RMI service
             Server srv = new Server(hMap);
             // Export srv to Java RMI runtime to accept incoming RMI calls on specified port

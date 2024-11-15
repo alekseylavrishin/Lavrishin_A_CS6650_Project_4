@@ -5,7 +5,7 @@
 2. Open a terminal window and navigate to the src/ directory
 3. Run the below commands:
 
-   * $ docker compose up
+   * $ docker compose up --build
 
    * $ docker stop rmi-client
 

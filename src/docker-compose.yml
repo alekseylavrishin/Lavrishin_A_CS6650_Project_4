@@ -1,15 +1,69 @@
 version: '3'
 services:
-  rmi-server:
+  rmi-server-1:
     build:
       context: .
       dockerfile: Dockerfile.server
-    container_name: rmi-server
+    container_name: rmi-server-1
     networks:
       - rmi-network
-    expose:
-      - "1099"
-      - "1300"
+    ports:
+      - "8081:1099" # RMI port maps to 8081 on host
+      - "1301:1300"
+    environment:
+      SERVER_NAME: "rmi-server-1"
+
+  rmi-server-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: rmi-server-2
+    networks:
+      - rmi-network
+    ports:
+      - "8082:1099" # RMI port maps to 8082 on host
+      - "1302:1300"
+    environment:
+      SERVER_NAME: "rmi-server-2"
+
+  rmi-server-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: rmi-server-3
+    networks:
+      - rmi-network
+    ports:
+      - "8083:1099" # RMI port maps to 8083 on host
+      - "1303:1300"
+    environment:
+      SERVER_NAME: "rmi-server-3"
+
+  rmi-server-4:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: rmi-server-4
+    networks:
+      - rmi-network
+    ports:
+      - "8084:1099" # RMI port maps to 8084 on host
+      - "1304:1300"
+    environment:
+      SERVER_NAME: "rmi-server-4"
+
+  rmi-server-5:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: rmi-server-5
+    networks:
+      - rmi-network
+    ports:
+      - "8085:1099" # RMI port maps to 8085 on host
+      - "1305:1300"
+    environment:
+      SERVER_NAME: "rmi-server-5"
 
   rmi-client:
     build:
@@ -19,7 +73,11 @@ services:
     networks:
       - rmi-network
     depends_on:
-      - rmi-server  # Make sure server starts before client
+      - rmi-server-1  # Make sure servers start before client
+      - rmi-server-2
+      - rmi-server-3
+      - rmi-server-4
+      - rmi-server-5
     stdin_open: true # Keep stdin open for interactivity
     tty: true
 networks:
