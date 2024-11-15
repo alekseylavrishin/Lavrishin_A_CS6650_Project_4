@@ -3,8 +3,10 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 
@@ -16,10 +18,22 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Server implements RemoteOperations{
     private ConcurrentHashMap<String, String> hMap;
     //private HashMap<String, String> hMap;
+    private ArrayList<RemoteOperations> serverRefs = new ArrayList<>();
+
 
 
     public Server(ConcurrentHashMap<String, String> hMap) throws RemoteException {
         this.hMap = hMap;
+    }
+
+
+    /**
+     * Used when connecting to the remaining servers in our 5 server cluster.
+     * Adds a given server reference to a list containing references to all servers except the current one.
+     * @param sRef The server reference to be added to the reference list.
+     */
+    public void addServerRef(RemoteOperations sRef) {
+        serverRefs.add(sRef);
     }
 
     /**
@@ -58,6 +72,13 @@ public class Server implements RemoteOperations{
         // Write key, value to hMap
         hMap.put(key, value);
         logMessage("Client: " + serverIP + " - Key: " + key + " Value: " +  value + " have been written to the server");
+
+        // Propagate creation to remaining servers here
+        // establish list of server hostnames
+        // loop thru list, if hostname[i] != SERVER_NAME,
+
+
+
         logMessage("Connection closed to " + serverIP);
         return "Key: " + key + " Value: " +  value + " have been written to the server";
     }
@@ -131,6 +152,16 @@ public class Server implements RemoteOperations{
     }
 
     /**
+     * Returns the $SERVER_NAME environment variable associated with the particular server.
+     * @return The $SERVER_NAME env variable tied with this server.
+     * @throws RemoteException
+     */
+    @Override
+    public String getServerName() throws RemoteException {
+        return System.getenv("SERVER_NAME");
+    }
+
+    /**
      * Gets current system time and prints Client output in MM-dd-yyyy HH:mm:ss.SSS format.
      * @param message The message to be printed.
      */
@@ -170,8 +201,7 @@ public class Server implements RemoteOperations{
 
 
         try {
-            // Set server IP to specified value
-
+            serverName = System.getenv("SERVER_NAME");
             // **** Uncomment to run in local terminal ****
             //System.setProperty("java.rmi.server.hostname", serverIP);
 
@@ -179,18 +209,37 @@ public class Server implements RemoteOperations{
             //System.setProperty("java.rmi.server.hostname", "rmi-server");
 
             // Set hostname to the SERVER_NAME env variable stored in the docker-compose file
-            System.setProperty("java.rmi.server.hostname", System.getenv("SERVER_NAME"));
+            System.setProperty("java.rmi.server.hostname", serverName);
             // Create remote object providing RMI service
             Server srv = new Server(hMap);
             // Export srv to Java RMI runtime to accept incoming RMI calls on specified port
             RemoteOperations stub = (RemoteOperations) UnicastRemoteObject.exportObject(srv, port);
 
-            // Create registry on port 1099
             Registry registry = LocateRegistry.createRegistry(1099);
-
             // Bind server reference to registry for client accessibility
-            registry.bind("RemoteOperations", stub);
+            registry.bind(serverName, stub);
             logMessage("Server initialized on host " + System.getProperty("java.rmi.server.hostname") + " port " + port);
+
+            // Connect to every server except itself
+            String[] serverNames = {"rmi-server-1", "rmi-server-2", "rmi-server-3", "rmi-server-4", "rmi-server-5"};
+            for (String sName : serverNames) {
+                if (!sName.equals(serverName)) {
+                    boolean connected = false; // Use timeout to retry connection
+                    for(int i = 0; i < 5 && !connected; i++) {
+                        try {
+                            registry = LocateRegistry.getRegistry(sName, 1099);
+                            RemoteOperations server = (RemoteOperations) registry.lookup(sName);
+                            srv.addServerRef(server); // Adds remote references of all other servers to ArrayList
+                            connected = true;
+                            logMessage("Connected to " + server.getServerName());
+                        } catch (Exception e) { // Retry if server hasn't been initialized yet
+                            logMessage("Retrying connection to " + sName + " (" + (i+1) + "/5");
+                            Thread.sleep(2000); // Wait 2 seconds before retrying
+                        }
+                    }
+                }
+            }
+
         } catch (Exception e) {
             logMessage("ERROR: " + e.getMessage());
         }

@@ -10,4 +10,5 @@ public interface RemoteOperations extends Remote {
     String getRecord(String key, String serverIP) throws RemoteException;
     String deleteRecord(String key, String serverIP) throws RemoteException;
     String getServerIP() throws RemoteException;
+    String getServerName() throws RemoteException;
 }
