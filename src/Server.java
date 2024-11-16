@@ -164,7 +164,7 @@ public class Server implements RemoteOperations{
         try {
             hMap.put(key, value);
             if (hMap.containsKey(key) && hMap.get(key).equals(value)) {
-                logMessage("PUT from " + serverIP + " key: " + key + " val " + value + " successfully propagated to this server");
+                logMessage("PUT from " + serverIP + " key: " + key + " val: " + value + " successfully propagated to this server");
                 return "PUT key: " + key + " val: " + value + " successfully propagated to " + getServerIP();
             }
             logMessage("ERROR: PUT from " + serverIP + " key: " + key + " val: " + value + " unsuccessfully propagated to this server");
