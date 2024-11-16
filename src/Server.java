@@ -72,7 +72,7 @@ public class Server implements RemoteOperations{
 
         // Write key, value to hMap
         hMap.put(key, value);
-        propagatePut(key, value); // Propagate to remaining servers in cluster
+        propagateOperation("PUT", key, value); // Propagate to remaining servers in cluster
         logMessage("Client: " + serverIP + " - Key: " + key + " Value: " +  value + " have been written to the server");
         logMessage("Connection closed to " + serverIP);
         return "Key: " + key + " Value: " +  value + " have been written to the server";
@@ -136,18 +136,26 @@ public class Server implements RemoteOperations{
         return result;
     }
 
+
+
     /**
-     * Used to send an RMI remotePut operation to every server except itself.
-     * When a key val pair is written to this server, this operation propagates the PUT to the remaining servers.
+     * Used to send an RMI remotePut or remoteDelete operation to every server except itself.
+     * On PUT: When a key val pair is written to this server, this operation propagates the PUT to the remaining servers.
+     * on DELETE: When a key is provided to this server, this operation propagates the DELETE operation to the remaining servers.
+     * @param operation The operation to be propagated to the remaining servers: either PUT or DELETE
      * @param key The key of the record.
      * @param value The value corresponding to the above key.
      * @throws RemoteException
      */
     @Override
-    public void propagatePut(String key, String value) throws RemoteException {
+    public void propagateOperation(String operation, String key, String value) throws RemoteException {
         // TODO: First work on propagating it at all. Then deal with timeouts and acks etc...
         for (RemoteOperations srv : serverRefs) {
-            logMessage(srv.remotePut(key, value, getServerIP()));
+            if (operation.equals("PUT")) {
+                logMessage(srv.remotePut(key, value, getServerIP()));
+            } else if (operation.equals("DELETE")) {
+                logMessage(srv.remoteDelete(key, getServerIP()));
+            }
         }
     }
 
@@ -172,6 +180,29 @@ public class Server implements RemoteOperations{
         } catch (Exception e) {
             logMessage("ERROR: " + e.getMessage());
             return "ERROR: PUT key: " + key + " val: " + value + " unsuccessful on " + getServerIP();
+        }
+    }
+
+    /**
+     * Replicates a DELETE operation on a remote server.
+     * @param key The key corresponding to the object to be deleted from the remote server.
+     * @param serverIP The hostname of the server the DELETE request originated from.
+     * @return A String message marking the success of the DELETE operation.
+     * @throws RemoteException
+     */
+    @Override
+    public String remoteDelete(String key, String serverIP) throws RemoteException {
+        try {
+            hMap.remove(key);
+            if(!hMap.containsKey(key)) {
+                logMessage("DELETE from " + serverIP + " key: " + key + " successfully propagated to this server");
+                return "DELETE key: " + key + " successfully propagated to " + getServerIP();
+            }
+            logMessage("ERROR: DELETE from " + serverIP + " key: " + key + " unsuccessfully propagated to this server");
+            return "ERROR: DELETE key: " + key + " val: " + " unsuccessful on " + getServerIP();
+        } catch (Exception e) {
+            logMessage("ERROR: " + e.getMessage());
+            return "ERROR: DELETE from " + serverIP + " key: " + key + " unsuccessfully propagated to this server";
         }
     }
 
