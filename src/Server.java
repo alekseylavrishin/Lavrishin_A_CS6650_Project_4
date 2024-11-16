@@ -1,3 +1,4 @@
+import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
@@ -38,7 +39,7 @@ public class Server implements RemoteOperations{
 
     /**
      * Getter for this.hMap
-     * @return The HashMap used by the server.
+     * @return The HashMap stored locally on the server.
      */
     public ConcurrentHashMap<String, String> getHMap() {
         return this.hMap;
@@ -71,14 +72,8 @@ public class Server implements RemoteOperations{
 
         // Write key, value to hMap
         hMap.put(key, value);
+        propagatePut(key, value); // Propagate to remaining servers in cluster
         logMessage("Client: " + serverIP + " - Key: " + key + " Value: " +  value + " have been written to the server");
-
-        // Propagate creation to remaining servers here
-        // establish list of server hostnames
-        // loop thru list, if hostname[i] != SERVER_NAME,
-
-
-
         logMessage("Connection closed to " + serverIP);
         return "Key: " + key + " Value: " +  value + " have been written to the server";
     }
@@ -142,6 +137,45 @@ public class Server implements RemoteOperations{
     }
 
     /**
+     * Used to send an RMI remotePut operation to every server except itself.
+     * When a key val pair is written to this server, this operation propagates the PUT to the remaining servers.
+     * @param key The key of the record.
+     * @param value The value corresponding to the above key.
+     * @throws RemoteException
+     */
+    @Override
+    public void propagatePut(String key, String value) throws RemoteException {
+        // TODO: First work on propagating it at all. Then deal with timeouts and acks etc...
+        for (RemoteOperations srv : serverRefs) {
+            logMessage(srv.remotePut(key, value, getServerIP()));
+        }
+    }
+
+    /**
+     * Replicates a PUT operation on a remote server
+     * @param key The key to be propagated to the remote server.
+     * @param value The value corresponding to the above key.
+     * @param serverIP The hostname of the server the PUT request originated from.
+     * @return a String message marking the success of the PUT operation.
+     * @throws RemoteException
+     */
+    @Override
+    public String remotePut(String key, String value, String serverIP) throws RemoteException {
+        try {
+            hMap.put(key, value);
+            if (hMap.containsKey(key) && hMap.get(key).equals(value)) {
+                logMessage("PUT from " + serverIP + " key: " + key + " val " + value + " successfully propagated to this server");
+                return "PUT key: " + key + " val: " + value + " successfully propagated to " + getServerIP();
+            }
+            logMessage("ERROR: PUT from " + serverIP + " key: " + key + " val: " + value + " unsuccessfully propagated to this server");
+            return "ERROR: PUT key: " + key + " val: " + value + " unsuccessful on " + getServerIP();
+        } catch (Exception e) {
+            logMessage("ERROR: " + e.getMessage());
+            return "ERROR: PUT key: " + key + " val: " + value + " unsuccessful on " + getServerIP();
+        }
+    }
+
+    /**
      * Returns the IP Address or hostname the Server is running on.
      * @return The IP or hostname the Server is using.
      * @throws RemoteException
@@ -174,6 +208,36 @@ public class Server implements RemoteOperations{
         String time = SDF.format(date);
 
         System.out.println(time + " -- " + message);
+    }
+
+    /**
+     * Establishes a connection to the other servers by getting a RemoteOperations reference to each server
+     *    and storing it in an ArrayList for use in future communication.
+     * Utilizes retries in order to re-attempt connection to servers that haven't been established yet.
+     * @param srv This specific Server object.
+     * @param serverName The name associated with this server object.
+     * @throws InterruptedException
+     */
+    public static void connectToRemoteServers(Server srv, String serverName) throws InterruptedException {
+        // Connect to every server except itself
+        String[] serverNames = {"rmi-server-1", "rmi-server-2", "rmi-server-3", "rmi-server-4", "rmi-server-5"};
+        for (String sName : serverNames) {
+            if (!sName.equals(serverName)) {
+                boolean connected = false; // Use timeout to retry connection
+                for(int i = 0; i < 5 && !connected; i++) {
+                    try {
+                        Registry registry = LocateRegistry.getRegistry(sName, 1099); // Get local registry of remote server
+                        RemoteOperations server = (RemoteOperations) registry.lookup(sName); // Get reference to remote server
+                        srv.addServerRef(server); // Add remote reference of server to ArrayList
+                        connected = true;
+                        logMessage("Connected to " + server.getServerName());
+                    } catch (Exception e) { // Retry if server hasn't been initialized yet
+                        logMessage("Retrying connection to " + sName + " (" + (i+1) + "/5");
+                        Thread.sleep(2000); // Wait 2 seconds before retrying
+                    }
+                }
+            }
+        }
     }
 
 
@@ -216,29 +280,11 @@ public class Server implements RemoteOperations{
             RemoteOperations stub = (RemoteOperations) UnicastRemoteObject.exportObject(srv, port);
 
             Registry registry = LocateRegistry.createRegistry(1099);
-            // Bind server reference to registry for client accessibility
+            // Bind server reference to registry for accessibility
             registry.bind(serverName, stub);
             logMessage("Server initialized on host " + System.getProperty("java.rmi.server.hostname") + " port " + port);
 
-            // Connect to every server except itself
-            String[] serverNames = {"rmi-server-1", "rmi-server-2", "rmi-server-3", "rmi-server-4", "rmi-server-5"};
-            for (String sName : serverNames) {
-                if (!sName.equals(serverName)) {
-                    boolean connected = false; // Use timeout to retry connection
-                    for(int i = 0; i < 5 && !connected; i++) {
-                        try {
-                            registry = LocateRegistry.getRegistry(sName, 1099);
-                            RemoteOperations server = (RemoteOperations) registry.lookup(sName);
-                            srv.addServerRef(server); // Adds remote references of all other servers to ArrayList
-                            connected = true;
-                            logMessage("Connected to " + server.getServerName());
-                        } catch (Exception e) { // Retry if server hasn't been initialized yet
-                            logMessage("Retrying connection to " + sName + " (" + (i+1) + "/5");
-                            Thread.sleep(2000); // Wait 2 seconds before retrying
-                        }
-                    }
-                }
-            }
+            connectToRemoteServers(srv, serverName);
 
         } catch (Exception e) {
             logMessage("ERROR: " + e.getMessage());

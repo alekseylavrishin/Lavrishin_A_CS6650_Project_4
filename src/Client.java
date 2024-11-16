@@ -184,11 +184,13 @@ public class Client {
             //Registry registry = LocateRegistry.getRegistry("rmi-server", 1099);
             Registry registry = LocateRegistry.getRegistry(serverNames[selection], 1099);
 
-            RemoteOperations stub = (RemoteOperations) registry.lookup("RemoteOperations");
+            //RemoteOperations stub = (RemoteOperations) registry.lookup("RemoteOperations");
+            // TODO: make server selection way more graceful
+            RemoteOperations stub = (RemoteOperations) registry.lookup(serverNames[selection]);
             logMessage("Connected to server on host " + stub.getServerIP());
 
             // Programmatically test GET, PUT, DELETE operations
-            testOperations(serverIP, stub);
+            //testOperations(serverIP, stub);
 
 
             askForOperationType(scanner, stub, serverIP);
