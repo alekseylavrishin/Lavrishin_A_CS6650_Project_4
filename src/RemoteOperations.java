@@ -12,10 +12,7 @@ public interface RemoteOperations extends Remote {
     String deleteRecord(String key, String serverIP) throws RemoteException;
     String getServerIP() throws RemoteException;
     String getServerName() throws RemoteException;
-    //void propagateOperation(String operation, String key, String value) throws RemoteException;
-    String remotePut(String key, String value, String serverIP) throws RemoteException;
     ConcurrentHashMap<String, String> getHMap() throws RemoteException;
-    String remoteDelete(String key, String serverIP) throws RemoteException;
     String prepareOperation(String transactionID, String operation, String key, String value) throws RemoteException;
     String commitOperation(String transactionID, String operation, String key, String value) throws RemoteException;
     void abortOperation(String transactionID) throws RemoteException;

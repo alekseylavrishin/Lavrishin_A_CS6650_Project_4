@@ -85,13 +85,13 @@ public class TwoPhaseCommitCoordinator implements TwoPCInterface{
             Future<Boolean> future = excecutorService.submit(() -> sendPrepare(server, transactionId, operation, key, value));
             try {
                 boolean ack = future.get(5, TimeUnit.SECONDS); // Timeout if unresponsive
-                ackStore.put(server, ack);
+                ackStore.put(server, ack); // can prob delete
                 if (!ack) {
                     prepareSuccess = false;
                 }
             } catch (Exception e) {
                 prepareSuccess = false;
-                ackStore.put(server, false);
+                ackStore.put(server, false);// can prob delete
             }
         }
         if (prepareSuccess) {
@@ -120,7 +120,8 @@ public class TwoPhaseCommitCoordinator implements TwoPCInterface{
     private void sendCommit(RemoteOperations server, String transactionId,  String operation, String key, String value) {
         try {
             String ack = server.commitOperation(transactionId, operation, key, value);
-            logMessage("ACK MESSAGE: " + ack);
+            logMessage("Transaction " + transactionId + " Server " + server.getServerIP() + " ACK MESSAGE: " + ack);
+            logMessage("Connection close to " + server.getServerIP());
         } catch (Exception e) {
             logMessage("ERROR: sendCommit: " + e.getMessage());
         }
@@ -142,15 +143,6 @@ public class TwoPhaseCommitCoordinator implements TwoPCInterface{
 
     public static void main(String[] args) throws RemoteException {
         try {
-            /*LocateRegistry.createRegistry(2099);
-
-            TwoPhaseCommitCoordinator coordinator = new TwoPhaseCommitCoordinator();
-            // Allow servers to find coordinator on Docker network
-            Naming.rebind("//0.0.0.0:2099/CoordinatorService", coordinator);
-            coordinator.connectToRemoteServers();*/
-
-
-
             logMessage("inside main func");
             String serverName = System.getenv("SERVER_NAME");
             // Set hostname to the SERVER_NAME env variable stored in the docker-compose file

@@ -118,6 +118,7 @@ public class Client {
             System.out.println("Enter '1' to perform PUT");
             System.out.println("Enter '2' to perform GET");
             System.out.println("Enter '3' to perform DELETE");
+            System.out.println("Enter '4' to programmatically test 5 of each operation");
             int selection = scanner.nextInt();
             scanner.nextLine(); // deal with \n left by scanner.nextInt()
 
@@ -141,7 +142,9 @@ public class Client {
                 String key = scanner.nextLine();
                 DELETEOperation(key, serverIP, stub);
 
-            } else { // rerun function if input not '1', '2', or '3'
+            } else if (selection == 4){
+                testOperations(serverIP, stub);
+            } else { // rerun function if input not '1', '2', '3', or '4'
                 logMessage("Invalid input detected");
                 askForOperationType(scanner, stub, serverIP);
             }
