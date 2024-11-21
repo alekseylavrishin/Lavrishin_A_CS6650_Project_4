@@ -1,4 +1,5 @@
 import java.rmi.RemoteException;
+import java.rmi.UnknownHostException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.text.SimpleDateFormat;
@@ -219,6 +220,8 @@ public class Client {
 
             askForOperationType(scanner, stub, serverIP);
 
+        } catch (UnknownHostException e) {
+            logMessage("ERROR: UnknownHostException - Host is unreachable");
         } catch (Exception e) {
             logMessage("ERROR: " + e.getMessage());
         }

@@ -1,5 +1,24 @@
 version: '3'
 services:
+
+  coordinator:
+    build:
+      context: .
+      dockerfile: Dockerfile.coordinator
+    container_name: coordinator
+    networks:
+      - rmi-network
+    depends_on:
+      - rmi-server-1  # Make sure servers start before coordinator
+      - rmi-server-2
+      - rmi-server-3
+      - rmi-server-4
+      - rmi-server-5
+    ports:
+      - "2099:2099"
+    environment:
+      SERVER_NAME: "coordinator"
+
   rmi-server-1:
     build:
       context: .

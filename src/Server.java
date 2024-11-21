@@ -1,4 +1,3 @@
-import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
@@ -7,7 +6,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 
@@ -18,24 +16,26 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class Server implements RemoteOperations{
     private ConcurrentHashMap<String, String> hMap;
-    //private HashMap<String, String> hMap;
     private ArrayList<RemoteOperations> serverRefs = new ArrayList<>();
-
+    private static TwoPCInterface serverRef;
+    private HashMap<String, ArrayList<String>> operationsMap = new HashMap<>();
+    private String pendingOperation, pendingKey, pendingValue;
+    private boolean prepared = false; // Signifies server's readiness to commit
 
 
     public Server(ConcurrentHashMap<String, String> hMap) throws RemoteException {
         this.hMap = hMap;
     }
 
-
-    /**
+/*
+    *//**
      * Used when connecting to the remaining servers in our 5 server cluster.
      * Adds a given server reference to a list containing references to all servers except the current one.
      * @param sRef The server reference to be added to the reference list.
-     */
+     *//*
     public void addServerRef(RemoteOperations sRef) {
         serverRefs.add(sRef);
-    }
+    }*/
 
     /**
      * Getter for this.hMap
@@ -70,12 +70,16 @@ public class Server implements RemoteOperations{
         // Get value from client
         logMessage("Client: " + serverIP + " - Value " + value + " received by server");
 
+        //TODO: *****
+        serverRef.TwoPhaseCommit("PUT", key, value);
         // Write key, value to hMap
-        hMap.put(key, value);
-        propagateOperation("PUT", key, value); // Propagate to remaining servers in cluster
-        logMessage("Client: " + serverIP + " - Key: " + key + " Value: " +  value + " have been written to the server");
+        //hMap.put(key, value);
+        //propagateOperation("PUT", key, value); // Propagate to remaining servers in cluster
+    /*    logMessage("Client: " + serverIP + " - Key: " + key + " Value: " +  value + " have been written to the server");
         logMessage("Connection closed to " + serverIP);
-        return "Key: " + key + " Value: " +  value + " have been written to the server";
+        return "Key: " + key + " Value: " +  value + " have been written to the server";*/
+        logMessage("Key: " + key + " Value: " +  value + " have been sent to the coordinator");
+        return "Key: " + key + " Value: " +  value + " have been sent to the coordinator";
     }
 
     /**
@@ -126,6 +130,8 @@ public class Server implements RemoteOperations{
             // If key exists, delete key from hMap
             hMap.remove(key);
             result = "Key " + key + " deleted from server";
+           // propagateOperation("DELETE", key, ""); // Propagate to remaining servers in cluster
+
         } else {
             // If key is not found in server
             result = "Key " + key + " cannot be found in server";
@@ -137,8 +143,8 @@ public class Server implements RemoteOperations{
     }
 
 
-
-    /**
+/*
+    *//**
      * Used to send an RMI remotePut or remoteDelete operation to every server except itself.
      * On PUT: When a key val pair is written to this server, this operation propagates the PUT to the remaining servers.
      * on DELETE: When a key is provided to this server, this operation propagates the DELETE operation to the remaining servers.
@@ -146,7 +152,7 @@ public class Server implements RemoteOperations{
      * @param key The key of the record.
      * @param value The value corresponding to the above key.
      * @throws RemoteException
-     */
+     *//*
     @Override
     public void propagateOperation(String operation, String key, String value) throws RemoteException {
         // TODO: First work on propagating it at all. Then deal with timeouts and acks etc...
@@ -157,7 +163,7 @@ public class Server implements RemoteOperations{
                 logMessage(srv.remoteDelete(key, getServerIP()));
             }
         }
-    }
+    }*/
 
     /**
      * Replicates a PUT operation on a remote server
@@ -240,15 +246,15 @@ public class Server implements RemoteOperations{
 
         System.out.println(time + " -- " + message);
     }
-
-    /**
+/*
+    *//**
      * Establishes a connection to the other servers by getting a RemoteOperations reference to each server
      *    and storing it in an ArrayList for use in future communication.
      * Utilizes retries in order to re-attempt connection to servers that haven't been established yet.
      * @param srv This specific Server object.
      * @param serverName The name associated with this server object.
      * @throws InterruptedException
-     */
+     *//*
     public static void connectToRemoteServers(Server srv, String serverName) throws InterruptedException {
         // Connect to every server except itself
         String[] serverNames = {"rmi-server-1", "rmi-server-2", "rmi-server-3", "rmi-server-4", "rmi-server-5"};
@@ -267,6 +273,157 @@ public class Server implements RemoteOperations{
                         Thread.sleep(2000); // Wait 2 seconds before retrying
                     }
                 }
+            }
+        }
+    }*/
+
+    /**
+     * First part of 2 Phase Commit Protocol.
+     * Prepares an operation to be committed to the server.
+     * @param transactionID A unique String to identify the specific transaction being prepared.
+     * @param operation The type of operation being prepared: a PUT or DELETE
+     * @param key The key to be PUT or DELETE-ed
+     * @param value The value corresponding to the above key
+     * @return A boolean value - true signifies an ACK message allowing the operation to successfully proceed.
+     *    false signifies the operation cannot proceed, aborting the entire operation on all servers.
+     */
+    @Override
+    public String prepareOperation(String transactionID, String operation, String key, String value) {
+        try {
+            logMessage("Transaction " + transactionID + " preparing " + operation + " operation");
+            ArrayList<String> transactionList = new ArrayList<>(); // Add transaction info to log
+            transactionList.add(0, operation);
+            transactionList.add(1, key);
+            transactionList.add(2, value);
+            operationsMap.put(transactionID, transactionList); // Put operation in operation log
+            return "ACK"; // ACK message, signifies readiness to commit
+        } catch (Exception e) {
+            logMessage("ERROR: Failed to prepare " + transactionID + " " + e.getMessage());
+            return "false"; // Unable to proceed with 2pc process
+        }
+        /*logMessage("Transaction " + transactionID + " preparing " + operation + " operation");
+        try {
+            this.pendingOperation = operation;
+            this.pendingKey = key;
+            this.pendingValue = value;
+            this.prepared = true;
+            return "ACK"; // ACK message, signifies readiness to commit
+
+        } catch (Exception e) {
+            logMessage("ERROR: Failed to prepare " + transactionID + " " + e.getMessage());
+            return "false"; // Unable to proceed with 2pc process
+        }*/
+    }
+
+    /**
+     * Second part of 2 Phase Commit Protocol.
+     *
+     * @param transactionID
+     * @param operation
+     * @param key
+     * @param value
+     * @throws RemoteException
+     */
+    @Override
+    public String commitOperation(String transactionID, String operation, String key, String value) throws RemoteException {
+        try {
+            if (operationsMap.containsKey(transactionID)) {
+                logMessage("Transaction " + transactionID + " committing " + operation + " operation");
+                if (operation.equals("PUT")) {
+                    hMap.put(key, value);
+                    logMessage("Transaction " + transactionID + " successfully committed");
+                    operationsMap.remove(transactionID); // Remove transaction from log
+                    return "ACK";
+                } else if (operation.equals("DELETE")) {
+                    hMap.remove(key);
+                    logMessage("Transaction " + transactionID + " successfully committed");
+                    operationsMap.remove(transactionID); // Remove transaction from log
+                    return "ACK";
+                } else {
+                    logMessage("ERROR: transaction " + transactionID + " No operation committed");
+                    operationsMap.remove(transactionID); // Remove transaction from log
+                    return "false";
+                }
+                // TODO: return message to coordinator
+                //clearPendingVals();
+            } else {
+                return "false";
+
+            }
+        } catch (Exception e) {
+            logMessage("ERROR: commitOperation " + e.getMessage());
+            return "false";
+        }
+    }
+
+    /**
+     *
+     * @param transactionID
+     * @throws RemoteException
+     */
+    @Override
+    public void abortOperation(String transactionID) throws RemoteException {
+        operationsMap.remove(transactionID);
+        logMessage("ERROR: Transaction " + transactionID + " Abort phase received. Rolling back any prepared state.");
+        clearPendingVals();
+    }
+
+    private void clearPendingVals() {
+        this.pendingOperation = null;
+        this.pendingKey = null;
+        this.pendingValue = null;
+        this.prepared = false;
+    }
+
+   /* public boolean twoPhaseCommit(String operation, String key, String value) throws Exception {
+        ArrayList<RemoteOperations> readyOperations = new ArrayList<>();
+        String transactionId = UUID.randomUUID().toString(); // Create random ID for use as transaction ID
+        // Prepare all servers for commit
+        for(RemoteOperations server : serverRefs) {
+            try {
+                logMessage("Transaction " + transactionId + " Preparing for " + operation + " operation");
+                boolean isPrepared = server.prepareOperation(transactionId, operation, key, value);
+                if(isPrepared) {
+                    readyOperations.add(server);
+                    logMessage("Transaction " + transactionId + " successfully prepared");
+                } else {
+                    abortOperation(transactionId);
+                    return false;
+                }
+            } catch (Exception e) {
+                abortOperation(transactionId);
+                return false;
+            }
+        }
+        // If all transactions are successfully prepared, attempt commit
+        for (RemoteOperations server : serverRefs) {
+            try {
+                server.commitOperation(transactionId, operation, key, value);
+            } catch (Exception e) {
+                operationsMap.remove(transactionId);
+                abortOperation(transactionId);
+                return false;
+            }
+        }
+        return true;
+    }*/
+
+    public static void connectToCoordinator() throws InterruptedException {
+        boolean connected = false; // Use timeout to retry connection
+        String cName = "coordinator";
+        for(int i = 0; i < 5 && !connected; i++) {
+            try {
+                Registry registry = LocateRegistry.getRegistry(cName, 2099); // Get local registry of remote server
+                logMessage("coordinator found");
+                TwoPCInterface server = (TwoPCInterface) registry.lookup(cName); // Get reference to coordinator on port 2099
+                logMessage("reference to coordinator got");
+                //addServerRef(server); // Add remote reference of server to ArrayList
+                serverRef = server; // Add remote reference of coordinator
+                connected = true;
+                logMessage("Connected to " + cName);
+            } catch (Exception e) { // Retry if server hasn't been initialized yet
+                logMessage("Retrying connection to " + cName + " (" + (i+1) + "/5");
+                Thread.sleep(2000); // Wait 2 seconds before retrying
             }
         }
     }
@@ -297,12 +454,6 @@ public class Server implements RemoteOperations{
 
         try {
             serverName = System.getenv("SERVER_NAME");
-            // **** Uncomment to run in local terminal ****
-            //System.setProperty("java.rmi.server.hostname", serverIP);
-
-            // **** Comment out to run in local terminal ****
-            //System.setProperty("java.rmi.server.hostname", "rmi-server");
-
             // Set hostname to the SERVER_NAME env variable stored in the docker-compose file
             System.setProperty("java.rmi.server.hostname", serverName);
             // Create remote object providing RMI service
@@ -315,7 +466,8 @@ public class Server implements RemoteOperations{
             registry.bind(serverName, stub);
             logMessage("Server initialized on host " + System.getProperty("java.rmi.server.hostname") + " port " + port);
 
-            connectToRemoteServers(srv, serverName);
+            connectToCoordinator();
+            //connectToRemoteServers(srv, serverName);
 
         } catch (Exception e) {
             logMessage("ERROR: " + e.getMessage());
