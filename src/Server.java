@@ -11,8 +11,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Java RMI Server implementing the RemoteOperations interface.
- * Communicates with the Client using Remote Method invocation to perform
- *   PUT, GET, DELETE operations over key/value pairs stored on the Server.
+ * Communicates with the Client using Remote Method invocation to receive input on key/value pairs and the type
+ *    of operation to perform.
+ * GET operations are performed locally on this server.
+ * PUT and DELETE operations are sent to the TwoPhaseCommitCoordinator to ensure the atomicity and integrity of transactions.
  */
 public class Server implements RemoteOperations{
     private ConcurrentHashMap<String, String> hMap;
@@ -54,15 +56,20 @@ public class Server implements RemoteOperations{
         logMessage("Client: " + serverIP + " - Server initializing PUT operation");
         logMessage(("Client: " + serverIP + " - Key " + key + " received by server"));
 
-        // Get value from client
         logMessage("Client: " + serverIP + " - Value " + value + " received by server");
 
-        //TODO: *****
-        serverRef.TwoPhaseCommit("PUT", key, value);
-
+        // Perform 2 Phase Commit
+        boolean result = serverRef.TwoPhaseCommit("PUT", key, value);
         logMessage("PUT operation Key: " + key + " Value: " +  value + " has been invoked");
+        String msg = "";
+        if (result) {
+            msg = "PUT operation Key: " + key + " Value: " +  value + " successful";
+        } else {
+            msg = "PUT operation Key: " + key + " Value: " +  value + " is not successful";
+        }
+        logMessage(msg);
         logMessage("Connection closed to " + serverIP);
-        return "PUT operation Key: " + key + " Value: " +  value + " has been invoked";
+        return msg;
     }
 
     /**
@@ -103,25 +110,28 @@ public class Server implements RemoteOperations{
      */
     @Override
     public String deleteRecord(String key, String serverIP) throws RemoteException {
-        String result = "";
         // confirm to server that DELETE operation is commencing
         logMessage("Client: " + serverIP + " Server initializing DELETE operation");
-
         logMessage("Client: " + serverIP + " Key " + key + " received by server");
+        String msg = "";
 
         if (hMap.containsKey(key)) {
-            // If key exists, delete key from hMap
-            serverRef.TwoPhaseCommit("DELETE", key, "");
-            result = "DELETE operation Key: " + key + " has been invoked";
+            boolean result = serverRef.TwoPhaseCommit("DELETE", key, "");
+            if(result) {
+                msg = "DELETE operation on Key: " + key + " successful";
+
+            } else {
+                msg = "DELETE operation on Key: " + key + " is not successful";
+            }
 
         } else {
             // If key is not found in server
-            result = "Key " + key + " cannot be found in server";
+            msg = "Key " + key + " cannot be found in server";
 
         }
-        logMessage(result);
+        logMessage(msg);
         logMessage("Connection closed to " + serverIP);
-        return result;
+        return msg;
     }
 
     /**
@@ -175,7 +185,7 @@ public class Server implements RemoteOperations{
     @Override
     public String prepareOperation(String transactionID, String operation, String key, String value) {
         try {
-            logMessage("Transaction " + transactionID + " preparing " + operation + " operation on Key" + key);
+            logMessage("Transaction " + transactionID + " preparing " + operation + " operation on Key " + key);
             ArrayList<String> transactionList = new ArrayList<>(); // Add transaction info to log
             transactionList.add(0, operation);
             transactionList.add(1, key);
@@ -192,11 +202,11 @@ public class Server implements RemoteOperations{
      * Second part of 2 Phase Commit Protocol.
      * If prepareOperation successfully returns an ACK message from all server to the 2PC coordinator,
      *    the coordinator then invokes this function to attempt to commit the PUT/DELETE operation to all servers.
-     * @param transactionID
-     * @param operation
-     * @param key
-     * @param value
-     * @return
+     * @param transactionID A unique String to identify the specific transaction being committed.
+     * @param operation The type of operation being committed: a PUT or DELETE
+     * @param key The key to be PUT or DELETE-ed
+     * @param value The value corresponding to the above key
+     * @return Upon success, returns an ACK to the 2PC Coordinator, allowing
      * @throws RemoteException
      */
     @Override
@@ -251,11 +261,10 @@ public class Server implements RemoteOperations{
             try {
                 Registry registry = LocateRegistry.getRegistry(cName, 2099); // Get local registry of remote server
                 TwoPCInterface server = (TwoPCInterface) registry.lookup(cName); // Get reference to coordinator on port 2099
-                //addServerRef(server); // Add remote reference of server to ArrayList
                 serverRef = server; // Add remote reference of coordinator
                 connected = true;
                 logMessage("Connected to " + cName);
-            } catch (Exception e) { // Retry if server hasn't been initialized yet
+            } catch (Exception e) { // Retry if coordinator hasn't been initialized yet
                 logMessage("Retrying connection to " + cName + " (" + (i+1) + "/5");
                 Thread.sleep(2000); // Wait 2 seconds before retrying
             }
