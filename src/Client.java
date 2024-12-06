@@ -122,6 +122,7 @@ public class Client {
             System.out.println("Enter '2' to perform GET");
             System.out.println("Enter '3' to perform DELETE");
             System.out.println("Enter '4' to programmatically test 5 of each operation");
+            System.out.println("Enter '5' to initiate a new Paxos run");
             int selection = scanner.nextInt();
             scanner.nextLine(); // deal with \n left by scanner.nextInt()
 
@@ -147,7 +148,11 @@ public class Client {
 
             } else if (selection == 4){
                 testOperations(serverIP, stub);
-            } else { // rerun function if input not '1', '2', '3', or '4'
+
+            } else if (selection == 5) {
+                initiateNewPaxosRun(stub);
+
+            } else { // rerun function if input not '1', '2', '3', '4', or '5'
                 logMessage("Invalid input detected");
                 askForOperationType(scanner, stub, serverIP);
             }
@@ -157,6 +162,13 @@ public class Client {
         } catch (RemoteException e) {
             logMessage("ERROR: " + e.getMessage());
         }
+    }
+
+
+    public static void initiateNewPaxosRun(RemoteOperations stub) throws RemoteException {
+        String result = stub.initiateNewPaxosRun();
+        logMessage(result);
+        logMessage("Connection closed to " + stub.getServerIP());
     }
 
     /**

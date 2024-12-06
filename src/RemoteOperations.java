@@ -14,4 +14,6 @@ public interface RemoteOperations extends Remote {
     String acceptRequest(int proposalId, String value, String key) throws RemoteException;
     void learn(String value) throws RemoteException;
     String propose(String value) throws RemoteException;
+    String initiateNewPaxosRun() throws RemoteException;
+    void clearPaxosStateMap() throws RemoteException;
 }

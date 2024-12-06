@@ -25,12 +25,36 @@ public class Server implements RemoteOperations{
     private ConcurrentHashMap<String, String> hMap;
     private static ArrayList<RemoteOperations> serverRefs = new ArrayList<>();
     private int proposalID; // Proposer: Proposer ID for new proposers
-    private String learnedValue = null; // Learner: Final consensus value
     private ConcurrentHashMap<String, PaxosState> paxosStateMap = new ConcurrentHashMap<>();
 
 
     public Server(ConcurrentHashMap<String, String> hMap ) throws RemoteException {
         this.hMap = hMap;
+    }
+
+    @Override
+    public String initiateNewPaxosRun() throws RemoteException {
+        try {
+            for (RemoteOperations srv : serverRefs) {
+                srv.clearPaxosStateMap();
+            }
+            logMessage("paxosStateMaps are cleared. " + getServerName() + " has initiated new Paxos run");
+            return "paxosStateMaps are cleared. " + getServerName() + " has initiated new Paxos run";
+        } catch (Exception e) {
+            logMessage("ERROR: Issue in initiateNewPaxosRun() " + e.getMessage());
+            return "ERROR: Issue in initiateNewPaxosRun()";
+        }
+
+    }
+
+    @Override
+    public void clearPaxosStateMap() throws RemoteException {
+        try {
+            paxosStateMap.clear();
+            logMessage("paxosStateMap is cleared for " + getServerName());
+        } catch (Exception e) {
+            logMessage("ERROR: Issue in clearPaxosStateMap() " + e.getMessage());
+        }
     }
 
     /**
