@@ -8,6 +8,11 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
+class PaxosState {
+    public int highestPromisedID = -1; // Acceptor: The highest proposal ID promised
+    public int acceptedProposalID = -1; // Acceptor: ID of the accepted proposal
+    public String acceptedValue = null; // Acceptor: Value of the accepted proposal
+}
 
 /**
  * Java RMI Server implementing the RemoteOperations interface.
@@ -19,11 +24,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Server implements RemoteOperations{
     private ConcurrentHashMap<String, String> hMap;
     private static ArrayList<RemoteOperations> serverRefs = new ArrayList<>();
-    private int highestPromisedID = -1; // Acceptor: The highest proposal ID promised
-    private int acceptedProposalID = -1; // Acceptor: ID of the accepted proposal
-    private String acceptedValue = null; // Acceptor: Value of the accepted proposal
     private int proposalID; // Proposer: Proposer ID for new proposers
     private String learnedValue = null; // Learner: Final consensus value
+    private ConcurrentHashMap<String, PaxosState> paxosStateMap = new ConcurrentHashMap<>();
+
 
     public Server(ConcurrentHashMap<String, String> hMap ) throws RemoteException {
         this.hMap = hMap;
@@ -37,21 +41,26 @@ public class Server implements RemoteOperations{
      */
     public String propose(String value) throws RemoteException {
         try {
-            proposalID = acceptedProposalID + 1; // Generate a unique proposal ID based off the previously accepted one
+            String key = value.split(",")[1]; // Associate Paxos operation with key of object being operated on
+            // Check for PAXOS state object associated with key, if not, then create one
+            PaxosState state = paxosStateMap.computeIfAbsent(key, k -> new PaxosState());
+
+            proposalID = state.acceptedProposalID + 1; // Generate a unique proposal ID
             int promises = 0; // Keep track of number of promises returned
-            logMessage("ID: " + proposalID + " Proposer " + getServerName() + " proposing " + value);
+            logMessage("ID: " + proposalID + " Proposer " + getServerName() + " proposing " + value + " for key " + key);
 
             // Keep track of ACCEPT messages returned from acceptors
             HashMap<String, String> acceptMap = new HashMap<>();
 
             // Prepare Phase: Send PREPARE message to all nodes (Acceptors)
             for (RemoteOperations srv : serverRefs) {
-                String[] responseList = srv.prepare(proposalID).split(",");
+                String[] responseList = srv.prepare(proposalID, key).split(",");
                 if (responseList[0].equals("PROMISE")) {
                     if (!responseList[2].equals("null")) { // If PAXOS instance has previously accepted a value
                         // [$operation, $key, $value]
                         String respProposal = responseList[1];
-                        String respVal = responseList[3];
+                        String respVal = responseList[3] + "," + responseList[4] + "," + responseList[5];
+                        logMessage("RESPVAL: " + respVal);
                         acceptMap.put(respProposal, respVal);
                     }
                     promises++; // Keep track of promises for below Promise Phase
@@ -64,6 +73,7 @@ public class Server implements RemoteOperations{
                 for (String acceptedVal : acceptMap.values()) {
                     if (acceptedVal != null) {  // If previously accepted value is returned by the acceptors, proposer uses it
                         finalValue = acceptedVal;
+                        logMessage("ACCEPTEDVAL " + acceptedVal);
                         break;
                     }
                 }
@@ -73,7 +83,7 @@ public class Server implements RemoteOperations{
 
                 // Accept Phase
                 for (RemoteOperations srv : serverRefs) {
-                    String[] responseList = srv.acceptRequest(proposalID, finalValue).split(",");
+                    String[] responseList = srv.acceptRequest(proposalID, finalValue, key).split(",");
                     if (responseList[0].equals("ACCEPT")) {
                         successCount++;
                     }
@@ -86,8 +96,8 @@ public class Server implements RemoteOperations{
                         srv.learn(finalValue);
                     }
 
-                    logMessage("ID: " + proposalID + " Proposer " + getServerName() + " reached consensus on value " + value);
-                    return "ID: " + proposalID + " Proposer " + getServerName() + " reached consensus on value " + value;
+                    logMessage("ID: " + proposalID + " Proposer " + getServerName() + " reached consensus on value " + finalValue);
+                    return "ID: " + proposalID + " Proposer " + getServerName() + " reached consensus on value " + finalValue;
 
                 } else { // Trigger if not enough accepts obtained
                     logMessage("ID: " + proposalID + " Proposer " + getServerName() + " failed to reach consensus");
@@ -111,17 +121,18 @@ public class Server implements RemoteOperations{
      * @throws RemoteException For RMI-related errors.
      */
     @Override
-    public synchronized String prepare(int proposalID) throws RemoteException {
+    public synchronized String prepare(int proposalID, String key) throws RemoteException {
         try {
-            if (proposalID > highestPromisedID) {
-                highestPromisedID = proposalID;
-                if(acceptedProposalID == -1) { // If PAXOS instance has not previously accepted a value
-                    logMessage("Promise ID " + highestPromisedID);
-                    return "PROMISE," + highestPromisedID + "," + "null";
+            PaxosState state = paxosStateMap.computeIfAbsent(key, k -> new PaxosState());
+            if (proposalID > state.highestPromisedID) {
+                state.highestPromisedID = proposalID;
+                if(state.acceptedProposalID == -1) { // If PAXOS instance has not previously accepted a value
+                    logMessage("Promise ID " + state.highestPromisedID);
+                    return "PROMISE," + state.highestPromisedID + "," + "null";
 
                 } else { // If PAXOS instance has previously accepted a value
-                    logMessage("PROMISE ID " + highestPromisedID + " accepted ID " + acceptedProposalID + " " + acceptedValue);
-                    return "PROMISE," + highestPromisedID + "," + acceptedProposalID + "," + acceptedValue;
+                    logMessage("PROMISE ID " + state.highestPromisedID + " accepted ID " + state.acceptedProposalID + " " + state.acceptedValue);
+                    return "PROMISE," + state.highestPromisedID + "," + state.acceptedProposalID + "," + state.acceptedValue;
                 }
             }
             // Ignore if proposalID < highestPromisedID
@@ -141,12 +152,13 @@ public class Server implements RemoteOperations{
      * @throws RemoteException For RMI-related errors.
      */
     @Override
-    public synchronized String acceptRequest(int proposalID, String value) throws RemoteException {
+    public synchronized String acceptRequest(int proposalID, String value, String key) throws RemoteException {
         try {
-            if (proposalID >= highestPromisedID) { // if proposalID is the largest, accept the request
-                highestPromisedID = proposalID;
-                acceptedProposalID = proposalID; // Update proposalId to use for future PAXOS requests
-                acceptedValue = value;
+            PaxosState state = paxosStateMap.computeIfAbsent(key, k -> new PaxosState());
+            if (proposalID >= state.highestPromisedID) { // if proposalID is the largest, accept the request
+                state.highestPromisedID = proposalID;
+                state.acceptedProposalID = proposalID; // Update proposalId to use for future PAXOS requests
+                state.acceptedValue = value;
 
                 logMessage("ACCEPT ID " + proposalID + " value " + value);
                 return "ACCEPT," + proposalID + "," + value;

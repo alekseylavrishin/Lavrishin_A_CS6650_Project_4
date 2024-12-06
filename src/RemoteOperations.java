@@ -10,8 +10,8 @@ public interface RemoteOperations extends Remote {
     String getRecord(String key, String serverIP) throws RemoteException;
     String getServerIP() throws RemoteException;
     String getServerName() throws RemoteException;
-    String prepare(int proposalId) throws RemoteException;
-    String acceptRequest(int proposalId, String value) throws RemoteException;
+    String prepare(int proposalId, String key) throws RemoteException;
+    String acceptRequest(int proposalId, String value, String key) throws RemoteException;
     void learn(String value) throws RemoteException;
     String propose(String value) throws RemoteException;
 }
