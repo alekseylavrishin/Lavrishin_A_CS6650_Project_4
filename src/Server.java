@@ -8,10 +8,13 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Keeps track of the state of the Paxos environment for a single Paxos run.
+ */
 class PaxosState {
-    public int highestPromisedID = -1; // Acceptor: The highest proposal ID promised
-    public int acceptedProposalID = -1; // Acceptor: ID of the accepted proposal
-    public String acceptedValue = null; // Acceptor: Value of the accepted proposal
+    public int highestPromisedID = -1; // The highest proposal ID promised
+    public int acceptedProposalID = -1; // ID of the accepted proposal
+    public String acceptedValue = null; // Value of the accepted proposal
 }
 
 /**
@@ -19,12 +22,15 @@ class PaxosState {
  * Communicates with the Client using Remote Method invocation to receive input on key/value pairs and the type
  *    of operation to perform.
  * GET operations are performed locally on this server.
- * PUT and DELETE operations are sent to the TwoPhaseCommitCoordinator to ensure the atomicity and integrity of transactions.
+ * PUT and DELETE operations are performed using Paxos to ensure the consistency of transactions.
  */
 public class Server implements RemoteOperations{
     private ConcurrentHashMap<String, String> hMap;
     private static ArrayList<RemoteOperations> serverRefs = new ArrayList<>();
-    private int proposalID; // Proposer: Proposer ID for new proposers
+    private int proposalID; // Proposer ID for new proposers
+    private boolean active = true; // Simulates the failure of an Acceptor
+
+    // Tracks the Paxos state of individual keys. Can be cleared to simulate a new Paxos run.
     private ConcurrentHashMap<String, PaxosState> paxosStateMap = new ConcurrentHashMap<>();
 
 
@@ -32,6 +38,11 @@ public class Server implements RemoteOperations{
         this.hMap = hMap;
     }
 
+    /**
+     * Simulates a new Paxos round, where previously accepted keys can be operated on again.
+     * @return A "success" message indicating the paxosStateMap for all servers has been cleared.
+     * @throws RemoteException For RMI-related errors.
+     */
     @Override
     public String initiateNewPaxosRun() throws RemoteException {
         try {
@@ -47,6 +58,11 @@ public class Server implements RemoteOperations{
 
     }
 
+    /**
+     * Clears the paxosStateMap for a given server. Once the StateMap is cleared, previously accepted
+     *    keys can be operated on again with Paxos.
+     * @throws RemoteException For RMI-related errors.
+     */
     @Override
     public void clearPaxosStateMap() throws RemoteException {
         try {
@@ -58,9 +74,28 @@ public class Server implements RemoteOperations{
     }
 
     /**
+     * Implements the Proposer functionality.
+     * The backbone of the Paxos protocol, is separated into 3 main phases.
      *
-     * @param value
-     * @return
+     * Prepare Phase:
+     * Sends a prepare message with a unique proposal number (proposalID) to all acceptors.
+     * Inquires if a value has been previously accepted for a particular key during this specific Paxos round.
+     * If nothing was accepted for the key, the acceptor returns a promise containing the current proposalID.
+     * If something has been accepted for the key, acceptor returns a promise containing the previously
+     *    accepted proposalID and previously accepted value, and the currently proposed changes for that key are
+     *    discarded in favor of the previously accepted changes.
+     *
+     * Promise Phase:
+     * Evaluates the returned promises from the acceptors. If a previously accepted value is returned for a specific key,
+     *    the proposer will perform the operation associated with the previously accepted value.
+     * If no value has been accepted for a particular key, the proposer will perform the currently proposed operation.
+     *
+     * Accept Phase:
+     * Acceptors attempt to ACCEPT the above value. If accepted by a majority of acceptors, the operation is
+     *    propagated to all learners to be performed.
+     * @param value A String in the format of "$operation,$key,$value".
+     * @return If successful, returns a message signifying the reaching of a PAXOS consensus.
+     *    If unsuccessful, returns a message signifying the failure to reach a consensus.
      * @throws RemoteException For RMI-related errors.
      */
     public String propose(String value) throws RemoteException {
