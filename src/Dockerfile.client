@@ -8,7 +8,6 @@ WORKDIR /app
 
 COPY Client.java /app
 COPY RemoteOperations.java /app
-COPY TwoPCInterface.java /app
 
 
 # Expose ports for server and rmiregistry

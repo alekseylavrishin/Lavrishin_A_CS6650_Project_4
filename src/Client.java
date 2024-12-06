@@ -73,7 +73,9 @@ public class Client {
      * @throws RemoteException
      */
     public static void PUTOperation(String key, String value, String serverIP, RemoteOperations stub) throws RemoteException {
-        String result = stub.createRecord(key, value, serverIP);
+        //String result = stub.createRecord(key, value, serverIP);
+        // [$operation, $key, $value]
+        String result = stub.propose("PUT," + key + "," + value);
         logMessage(result);
         logMessage("Connection closed to " + stub.getServerIP());
     }
@@ -99,7 +101,8 @@ public class Client {
      * @throws RemoteException
      */
     public static void DELETEOperation(String key, String serverIP, RemoteOperations stub) throws RemoteException {
-        String result = stub.deleteRecord(key, serverIP);
+        //String result = stub.deleteRecord(key, serverIP);
+        String result = stub.propose("DELETE," + key + ",null");
         logMessage(result);
         logMessage("Connection closed to " + stub.getServerIP());
     }
@@ -200,26 +203,15 @@ public class Client {
         }
 
         try {
-            // **** Uncomment to run in local terminal ****
-            //Registry registry = LocateRegistry.getRegistry(serverIP);
-
-            // **** Comment out to run in local terminal ****
 
             String[] serverNames = {"rmi-server-1", "rmi-server-2", "rmi-server-3", "rmi-server-4", "rmi-server-5"};
             // Create scanner for accepting user input
             Scanner scanner = new Scanner(System.in);
             int selection = askForServer(scanner);
-            //Registry registry = LocateRegistry.getRegistry("rmi-server", 1099);
             Registry registry = LocateRegistry.getRegistry(serverNames[selection], 1099);
 
-            //RemoteOperations stub = (RemoteOperations) registry.lookup("RemoteOperations");
-            // TODO: make server selection way more graceful
             RemoteOperations stub = (RemoteOperations) registry.lookup(serverNames[selection]);
             logMessage("Connected to server on host " + stub.getServerIP());
-
-            // Programmatically test GET, PUT, DELETE operations
-            //testOperations(serverIP, stub);
-
 
             askForOperationType(scanner, stub, serverIP);
 

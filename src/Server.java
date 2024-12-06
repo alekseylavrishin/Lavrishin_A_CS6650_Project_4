@@ -18,140 +18,335 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class Server implements RemoteOperations{
     private ConcurrentHashMap<String, String> hMap;
-    private ArrayList<RemoteOperations> serverRefs = new ArrayList<>();
-    private static TwoPCInterface serverRef;
-    private HashMap<String, ArrayList<String>> operationsMap = new HashMap<>(); // Stores prepared operations for future commit
+    private static ArrayList<RemoteOperations> serverRefs = new ArrayList<>();
+    private int highestPromisedID = -1; // Acceptor: The highest proposal ID promised
+    private int acceptedProposalID = -1; // Acceptor: ID of the accepted proposal
+    private String acceptedValue = null; // Acceptor: Value of the accepted proposal
+    private int proposalID; // Proposer: Proposer ID for new proposers
+    private String learnedValue = null; // Learner: Final consensus value
 
-    public Server(ConcurrentHashMap<String, String> hMap) throws RemoteException {
+    public Server(ConcurrentHashMap<String, String> hMap ) throws RemoteException {
         this.hMap = hMap;
     }
 
     /**
-     * Getter for this.hMap
-     * @return The HashMap stored locally on the server.
+     *
+     * @param value
+     * @return
+     * @throws RemoteException For RMI-related errors.
      */
-    public ConcurrentHashMap<String, String> getHMap() {
-        return this.hMap;
+    public String propose(String value) throws RemoteException {
+        try {
+            proposalID = acceptedProposalID + 1; // Generate a unique proposal ID based off the previously accepted one
+            int promises = 0; // Keep track of number of promises returned
+            logMessage("ID: " + proposalID + " Proposer " + getServerName() + " proposing " + value);
+
+            // Keep track of ACCEPT messages returned from acceptors
+            HashMap<String, String> acceptMap = new HashMap<>();
+
+            // Prepare Phase: Send PREPARE message to all nodes (Acceptors)
+            for (RemoteOperations srv : serverRefs) {
+                String[] responseList = srv.prepare(proposalID).split(",");
+                if (responseList[0].equals("PROMISE")) {
+                    if (!responseList[2].equals("null")) { // If PAXOS instance has previously accepted a value
+                        // [$operation, $key, $value]
+                        String respProposal = responseList[1];
+                        String respVal = responseList[3];
+                        acceptMap.put(respProposal, respVal);
+                    }
+                    promises++; // Keep track of promises for below Promise Phase
+                }
+            }
+
+            // Promise Phase: Evaluate replies from acceptors
+            if (promises > serverRefs.size() / 2) { // Quorum has been reached
+                String finalValue = value; // If no value returned by the acceptors, proposer uses initial value
+                for (String acceptedVal : acceptMap.values()) {
+                    if (acceptedVal != null) {  // If previously accepted value is returned by the acceptors, proposer uses it
+                        finalValue = acceptedVal;
+                        break;
+                    }
+                }
+
+                logMessage("ID: " + proposalID + " Proposer " + getServerName() + " accepting " + finalValue);
+                int successCount = 0;
+
+                // Accept Phase
+                for (RemoteOperations srv : serverRefs) {
+                    String[] responseList = srv.acceptRequest(proposalID, finalValue).split(",");
+                    if (responseList[0].equals("ACCEPT")) {
+                        successCount++;
+                    }
+                }
+
+                if (successCount > serverRefs.size() / 2) {
+                    // Success - kick off learner to perform PUT/DELETE operation
+                    for (RemoteOperations srv : serverRefs) {
+                        //srv.learn(value);
+                        srv.learn(finalValue);
+                    }
+
+                    logMessage("ID: " + proposalID + " Proposer " + getServerName() + " reached consensus on value " + value);
+                    return "ID: " + proposalID + " Proposer " + getServerName() + " reached consensus on value " + value;
+
+                } else { // Trigger if not enough accepts obtained
+                    logMessage("ID: " + proposalID + " Proposer " + getServerName() + " failed to reach consensus");
+                    return "ID: " + proposalID + " Proposer " + getServerName() + " failed to reach consensus";
+                }
+            } else { // Trigger if not enough promises obtained
+                logMessage("ID: " + proposalID + " Proposer " + getServerName() + " did not receive a majority of promises");
+                return "ID: " + proposalID + " Proposer " + getServerName() + " Proposal rejected";
+            }
+        } catch (Exception e) {
+            logMessage("ERROR: Issue in propose method " + e.getMessage());
+            return "ERROR: ID: " + proposalID + " Proposer " + getServerName() + " Proposal rejected due to error in propose method";
+        }
     }
 
     /**
-     * Setter for this.hMap.
-     * @param newMap The new HashMap to be used by the server.
-     */
-    public void setHMap(ConcurrentHashMap<String, String> newMap) {
-        this.hMap = newMap;
-    }
-
-    /**
-     * Passes the key and value to the 2PC Coordinator to create a new record in all server's hashmaps.
-     * @param key The key of the record.
-     * @param value The value corresponding to the above key.
-     * @param serverIP The IP address or hostname of the client corresponding to this transaction.
-     * @return A String confirming the creation of the record.
-     * @throws RemoteException
+     * Part of the Acceptor functionality. Proposer -> Acceptor.
+     * Receives a PREPARE message from the Proposer's propose method.
+     * @param proposalID A unique identifier for the specific operation being proposed.
+     * @return A PROMISE if the proposalID is greater than the ID previously proposed.
+     * @throws RemoteException For RMI-related errors.
      */
     @Override
-    public String createRecord(String key, String value, String serverIP) throws RemoteException {
-        logMessage("Connected to Client on " + serverIP);
-        logMessage("Client: " + serverIP + " - Server initializing PUT operation");
-        logMessage(("Client: " + serverIP + " - Key " + key + " received by server"));
+    public synchronized String prepare(int proposalID) throws RemoteException {
+        try {
+            if (proposalID > highestPromisedID) {
+                highestPromisedID = proposalID;
+                if(acceptedProposalID == -1) { // If PAXOS instance has not previously accepted a value
+                    logMessage("Promise ID " + highestPromisedID);
+                    return "PROMISE," + highestPromisedID + "," + "null";
 
-        logMessage("Client: " + serverIP + " - Value " + value + " received by server");
-
-        // Perform 2 Phase Commit
-        boolean result = serverRef.TwoPhaseCommit("PUT", key, value);
-        logMessage("PUT operation Key: " + key + " Value: " +  value + " has been invoked");
-        String msg = "";
-        if (result) {
-            msg = "PUT operation Key: " + key + " Value: " +  value + " successful";
-        } else {
-            msg = "PUT operation Key: " + key + " Value: " +  value + " is not successful";
+                } else { // If PAXOS instance has previously accepted a value
+                    logMessage("PROMISE ID " + highestPromisedID + " accepted ID " + acceptedProposalID + " " + acceptedValue);
+                    return "PROMISE," + highestPromisedID + "," + acceptedProposalID + "," + acceptedValue;
+                }
+            }
+            // Ignore if proposalID < highestPromisedID
+            return "REJECT";
+        } catch (Exception e) {
+            logMessage("ERROR: Issue in Acceptor's prepare method " + e.getMessage());
+            return "REJECT";
         }
-        logMessage(msg);
-        logMessage("Connection closed to " + serverIP);
-        return msg;
     }
 
     /**
+     * Part of the Acceptor functionality. Acceptor -> Proposer.
+     * Attempts to ACCEPT the proposalID and value provided by Proposer.
+     * @param proposalID A unique identifier for the specific operation being accepted.
+     * @param value A String in the format of $operation,$key,$value.
+     * @return An ACCEPT message if the request's proposalID >= highestPromisedID.
+     * @throws RemoteException For RMI-related errors.
+     */
+    @Override
+    public synchronized String acceptRequest(int proposalID, String value) throws RemoteException {
+        try {
+            if (proposalID >= highestPromisedID) { // if proposalID is the largest, accept the request
+                highestPromisedID = proposalID;
+                acceptedProposalID = proposalID; // Update proposalId to use for future PAXOS requests
+                acceptedValue = value;
+
+                logMessage("ACCEPT ID " + proposalID + " value " + value);
+                return "ACCEPT," + proposalID + "," + value;
+            }
+            // Otherwise reject request
+            logMessage("REJECT ID " + proposalID + " value " + value);
+            return "REJECT," + proposalID + "," + value;
+        } catch (Exception e) {
+            logMessage("ERROR: Issue in Acceptor's acceptRequest method " + e.getMessage());
+            return "REJECT," + proposalID + "," + value;
+        }
+    }
+
+    /**
+     * Part of the Learner functionality, Acceptor -> Learner.
+     * Once a request has been accepted by a quorum of Acceptors, this method begins the process
+     *    of performing a PUT or DELETE operation.
+     * @param value A String in the format of $operation,$key,$value.
+     * @throws RemoteException For RMI-related errors.
+     */
+    @Override
+    public void learn(String value) throws RemoteException {
+        try {
+            // [$operation, $key, $value]
+            String[] responseList = value.split(",");
+            if (responseList[0].equals("PUT")) {
+                String result = createRecord(responseList[1], responseList[2]);
+                logMessage(result);
+            } else if (responseList[0].equals("DELETE")) {
+                String result = deleteRecord(responseList[1]);
+                hMap.remove(responseList[1]);
+                logMessage(result);
+            } else {
+                logMessage("Learner " + getServerName() + " invalid operation detected, aborting");
+            }
+        } catch (Exception e) {
+            logMessage("ERROR: Issue in Learner's learn method " + e.getMessage());
+        }
+    }
+
+    /**
+     * Establishes a connection to the other servers by getting a RemoteOperations reference to each server
+     *    and storing it in an ArrayList for use in future RMI communication.
+     * Utilizes retries in order to re-attempt connection to servers that haven't been established yet.
+     * @throws InterruptedException For thread-related issues.
+     */
+    public static void connectToPaxosNodes() throws InterruptedException {
+        try {
+            // Connect to each PAXOS server
+            String[] serverNames = {"rmi-server-1", "rmi-server-2", "rmi-server-3", "rmi-server-4", "rmi-server-5"};
+            // Initialize Paxos cluster
+            for (String sName : serverNames) {
+                boolean connected = false; // Use timeout to retry connection
+                for (int i = 0; i < 5 && !connected; i++) {
+                    try {
+                        Registry registry = LocateRegistry.getRegistry(sName, 1099); // Get local registry of remote server
+                        RemoteOperations server = (RemoteOperations) registry.lookup(sName); // Get reference to remote server
+                        serverRefs.add(server); // Add remote reference of server to ArrayList
+                        connected = true;
+                        logMessage("Connected to " + server.getServerName());
+
+                    } catch (Exception e) { // Retry if server hasn't been initialized yet
+                        logMessage("Retrying connection to " + sName + " (" + (i + 1) + "/5");
+                        Thread.sleep(2000); // Wait 2 seconds before retrying
+                    }
+                }
+
+            }
+        } catch (Exception e) {
+            logMessage("ERROR: Issue in connectToPaxosNodes() " + e.getMessage());
+        }
+    }
+
+    /**
+     * Is called by the PAXOS learn() method to create a new record in a server's hashmap.
+     * @param key The key of the record.
+     * @param value The value corresponding to the above key.
+     * @return A String confirming the creation of the record.
+     * @throws RemoteException For RMI-related errors.
+     */
+    public String createRecord(String key, String value) throws RemoteException {
+        try {
+            logMessage(" - Server initializing PUT operation for key " + key + " value " + value);
+            hMap.put(key, value);
+            String msg = "";
+            if (hMap.get(key).equals(value)) {
+                msg = "PUT operation Key: " + key + " Value: " + value + " successful";
+            } else {
+                msg = "PUT operation Key: " + key + " Value: " + value + " is not successful";
+            }
+            //logMessage(msg);
+            logMessage("Connection closed");
+            return msg;
+
+        } catch (Exception e) {
+            String msg = "ERROR: createRecord failed";
+            logMessage(msg + " " + e.getMessage());
+            return msg;
+        }
+    }
+
+    /**
+     * Is called locally on the server without involving the PAXOS protocol.
      * Returns the value of an existing record stored in the Server's hashmap.
      * @param key The key of the record to be returned.
      * @param serverIP The IP address or hostname of the client corresponding to this transaction.
      * @return A String containing either the value of the corresponding key or a "cannot be found"
      *   message if the key is invalid.
-     * @throws RemoteException
+     * @throws RemoteException For RMI-related errors.
      */
     @Override
     public String getRecord(String key, String serverIP) throws RemoteException {
-        String result = "";
-        logMessage("Client: " + serverIP + " - Server initializing GET operation");
-        logMessage(("Client: " + serverIP + " - Key " + key + " received by server"));
+        try {
+            String result = "";
+            logMessage(" - Server initializing GET operation");
+            logMessage(" - Key " + key + " received by server");
 
-        if(hMap.containsKey(key)) {
-            // Return value to client
-            String value = hMap.get(key);
-            result = "Value for " + key + ": " + value;
-        } else { // If key cannot be found in hMap
-            // Return 'cannot be found' message to client
-            result = "Key " + key + " cannot be found";
+            if (hMap.containsKey(key)) {
+                String value = hMap.get(key);
+                result = "Value for " + key + ": " + value;
+            } else { // If key cannot be found in hMap
+                result = "Key " + key + " cannot be found";
+            }
+
+            logMessage("Client: " + serverIP + " - " + result);
+            logMessage("Connection closed to " + serverIP);
+            return result;
         }
-        logMessage("Client: " + serverIP + " - " + result);
-        logMessage("Connection closed to " + serverIP);
-        return result;
+        catch (Exception e) {
+            logMessage("ERROR: Issue in getRecord " + e.getMessage());
+            return "ERROR: Issue in getRecord Key " + key + " cannot be found";
+        }
     }
 
     /**
-     * Deletes an existing record stored in the server's hashmap.
+     * Is called by the PAXOS learn() methods to delete an existing record stored in the server's hashmap.
      * If a record doesn't exist, returns "cannot be found" message.
      * @param key The key of the record to be deleted
-     * @param serverIP The IP address or hostname of the client corresponding to this transaction.
      * @return A String containing either the confirmation of deletion or
      *   a "cannot be found" message if key is invalid.
-     * @throws RemoteException
+     * @throws RemoteException For RMI-related errors.
      */
-    @Override
-    public String deleteRecord(String key, String serverIP) throws RemoteException {
-        // confirm to server that DELETE operation is commencing
-        logMessage("Client: " + serverIP + " Server initializing DELETE operation");
-        logMessage("Client: " + serverIP + " Key " + key + " received by server");
-        String msg = "";
+    public String deleteRecord(String key) throws RemoteException {
+        try {
+            // confirm to server that DELETE operation is commencing
+            logMessage(" - Server initializing DELETE operation");
+            logMessage(" - Key " + key + " received by server");
+            String msg = "";
 
-        if (hMap.containsKey(key)) {
-            boolean result = serverRef.TwoPhaseCommit("DELETE", key, "");
-            if(result) {
-                msg = "DELETE operation on Key: " + key + " successful";
+            if (hMap.containsKey(key)) {
+                hMap.remove(key);
+                if (!hMap.containsKey(key)) {
+                    msg = "DELETE operation on Key: " + key + " successful";
 
+                } else {
+                    msg = "DELETE operation on Key: " + key + " was not successful";
+                }
             } else {
-                msg = "DELETE operation on Key: " + key + " is not successful";
+                // If key is not found in server
+                msg = "Key " + key + " cannot be found in server";
             }
 
-        } else {
-            // If key is not found in server
-            msg = "Key " + key + " cannot be found in server";
-
+            //logMessage(msg);
+            logMessage("Connection closed");
+            return msg;
+        } catch (Exception e) {
+            String msg = "ERROR: deleteRecord failed";
+            logMessage(msg + " " + e.getMessage());
+            return msg;
         }
-        logMessage(msg);
-        logMessage("Connection closed to " + serverIP);
-        return msg;
     }
 
     /**
      * Returns the IP Address or hostname the Server is running on.
      * @return The IP or hostname the Server is using.
-     * @throws RemoteException
+     * @throws RemoteException for RMI-related errors.
      */
     @Override
-    public String getServerIP() throws RemoteException{
-        return System.getProperty("java.rmi.server.hostname");
+    public String getServerIP() throws RemoteException {
+        try {
+            return System.getProperty("java.rmi.server.hostname");
+        } catch (Exception e) {
+            logMessage("ERROR: Issue in getServerIP() " + e.getMessage());
+            return "ERROR";
+        }
     }
 
     /**
      * Returns the $SERVER_NAME environment variable associated with the particular server.
      * @return The $SERVER_NAME env variable tied with this server.
-     * @throws RemoteException
+     * @throws RemoteException For RMI-related errors.
      */
     @Override
     public String getServerName() throws RemoteException {
-        return System.getenv("SERVER_NAME");
+        try {
+            return System.getenv("SERVER_NAME");
+        } catch (Exception e) {
+            logMessage("ERROR: Issue in getServerName() " + e.getMessage());
+            return "ERROR";
+        }
     }
 
     /**
@@ -169,107 +364,6 @@ public class Server implements RemoteOperations{
         System.out.println(time + " -- " + message);
     }
 
-    /**
-     * First part of 2 Phase Commit Protocol.
-     * If successful, prepares an operation to be committed to the server by adding the transaction's info into the coordinator's
-     *    operationsMap hashmap.
-     * Returns ACK to 2PC coordinator if preparation is successful.
-     * If preparation fails, the operation/transaction does not move forward to commit on any server.
-     * @param transactionID A unique String to identify the specific transaction being prepared.
-     * @param operation The type of operation being prepared: a PUT or DELETE
-     * @param key The key to be PUT or DELETE-ed
-     * @param value The value corresponding to the above key
-     * @return A boolean value - true signifies an ACK message allowing the operation to successfully proceed.
-     *    false signifies the operation cannot proceed, aborting the entire operation on all servers.
-     */
-    @Override
-    public String prepareOperation(String transactionID, String operation, String key, String value) {
-        try {
-            logMessage("Transaction " + transactionID + " preparing " + operation + " operation on Key " + key);
-            ArrayList<String> transactionList = new ArrayList<>(); // Add transaction info to log
-            transactionList.add(0, operation);
-            transactionList.add(1, key);
-            transactionList.add(2, value);
-            operationsMap.put(transactionID, transactionList); // Put operation in operation log
-            return "ACK"; // ACK message, signifies readiness to commit
-        } catch (Exception e) {
-            logMessage("ERROR: Failed to prepare " + transactionID + " " + e.getMessage());
-            return "false"; // Unable to proceed with 2pc process
-        }
-    }
-
-    /**
-     * Second part of 2 Phase Commit Protocol.
-     * If prepareOperation successfully returns an ACK message from all server to the 2PC coordinator,
-     *    the coordinator then invokes this function to attempt to commit the PUT/DELETE operation to all servers.
-     * @param transactionID A unique String to identify the specific transaction being committed.
-     * @param operation The type of operation being committed: a PUT or DELETE
-     * @param key The key to be PUT or DELETE-ed
-     * @param value The value corresponding to the above key
-     * @return Upon success, returns an ACK to the 2PC Coordinator, allowing
-     * @throws RemoteException
-     */
-    @Override
-    public String commitOperation(String transactionID, String operation, String key, String value) throws RemoteException {
-        try {
-            if (operationsMap.containsKey(transactionID)) {
-                logMessage("Transaction " + transactionID + " committing " + operation + " operation");
-                if (operation.equals("PUT")) {
-                    hMap.put(key, value);
-                    logMessage("Transaction " + transactionID + " on Key " + key + " successfully committed");
-                    operationsMap.remove(transactionID); // Remove transaction from log
-                    return "ACK";
-                } else if (operation.equals("DELETE")) {
-                    hMap.remove(key);
-                    logMessage("Transaction " + transactionID + " on Key " + key + " successfully committed");
-                    operationsMap.remove(transactionID); // Remove transaction from log
-                    return "ACK";
-                } else {
-                    logMessage("ERROR: transaction " + transactionID + " No operation committed");
-                    operationsMap.remove(transactionID); // Remove transaction from log
-                    return "false";
-                }
-            } else {
-                return "false";
-
-            }
-        } catch (Exception e) {
-            logMessage("ERROR: commitOperation " + e.getMessage());
-            return "false";
-        }
-    }
-
-    /**
-     * Invoked by the 2PC Coordinator to abort an operation in progress.
-     * @param transactionID A unique ID associated with the transaction to be aborted.
-     * @throws RemoteException
-     */
-    @Override
-    public void abortOperation(String transactionID) throws RemoteException {
-        operationsMap.remove(transactionID);
-        logMessage("ERROR: Transaction " + transactionID + " Abort phase received. Rolling back any prepared state.");
-    }
-
-    /**
-     * Connects this server to the 2PC Coordinator for Two Phase Commit functionality.
-     * @throws InterruptedException
-     */
-    public static void connectToCoordinator() throws InterruptedException {
-        boolean connected = false; // Use timeout to retry connection
-        String cName = "coordinator";
-        for(int i = 0; i < 5 && !connected; i++) {
-            try {
-                Registry registry = LocateRegistry.getRegistry(cName, 2099); // Get local registry of remote server
-                TwoPCInterface server = (TwoPCInterface) registry.lookup(cName); // Get reference to coordinator on port 2099
-                serverRef = server; // Add remote reference of coordinator
-                connected = true;
-                logMessage("Connected to " + cName);
-            } catch (Exception e) { // Retry if coordinator hasn't been initialized yet
-                logMessage("Retrying connection to " + cName + " (" + (i+1) + "/5");
-                Thread.sleep(2000); // Wait 2 seconds before retrying
-            }
-        }
-    }
 
 
     public static void main(String[] args) throws RemoteException {
@@ -309,10 +403,10 @@ public class Server implements RemoteOperations{
             registry.bind(serverName, stub);
             logMessage("Server initialized on host " + System.getProperty("java.rmi.server.hostname") + " port " + port);
 
-            connectToCoordinator(); // Connect the server to the coordinator for 2PC functionality
+            connectToPaxosNodes(); // Connect to all PAXOS nodes
 
         } catch (Exception e) {
-            logMessage("ERROR: " + e.getMessage());
+            logMessage("Failed to connect to PAXOS nodes: " + e.getMessage());
         }
 
     }

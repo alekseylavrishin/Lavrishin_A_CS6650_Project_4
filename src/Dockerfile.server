@@ -9,7 +9,6 @@ WORKDIR /app
 # Copy Server files from their current directory to the container's working directory
 COPY Server.java /app
 COPY RemoteOperations.java /app
-COPY TwoPCInterface.java /app
 
 # Expose ports for server and rmiregistry
 EXPOSE 1099 1300
