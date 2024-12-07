@@ -17,20 +17,75 @@
 
 The reason for stopping the client after running docker compose is that docker compose launches containers in detached mode, causing them to run as a background service and not allowing for interaction via the terminal.
 
+### Navigating the client
+When launching the client, you will first encounter the below:
+``````
+Enter '1' to access Server #1
+Enter '2' to access Server #2
+Enter '3' to access Server #3
+Enter '4' to access Server #4
+Enter '5' to access Server #5
+``````
+Enter a number from 1 to 5 and press "Enter", then advance to the next dialog.
+``````
+Enter '1' to perform PUT
+Enter '2' to perform GET
+Enter '3' to perform DELETE
+Enter '4' to programmatically test 5 of each operation
+Enter '5' to initiate a new Paxos run
+``````
+1. Performs a PUT operation on a Key and Value
+2. Performs a GET operation on a Key
+3. Performs a DELETE operation on a Key
+4. Runs a test method that tests the functionality of PUT-ing DELETE-ing and GET-ing Key-Value pairs in the Paxos cluster.
+5. Advances Paxos to a new round allowing you to run a new operation on a Key that previously had an Accepted operation.
+
+
 ## Executive Summary
 
 ### Assignment Overview:
-The purpose of this assignment was to extend Project 2’s Single Instance Key-Value store by replicating Project 2’s single server into 5 distinct servers, with each server possessing its own key-value store. When performing PUT or DELETE operations, all key-value stores are required to maintain the availability and consistency of data among the 5 replicas. Clients should be able to interact with any of the 5 servers for PUT, GET, DELETE operations and receive the same information and functionality from all. To prevent inconsistencies in the data, the Two Phase Commit Protocol (2PC) was implemented for PUT and DELETE operations, where changes are either fully committed to all servers or aborted entirely. Since the PUT and DELETE operations reliably propagated changes to the server replicas via 2PC, the GET operation remains largely unchanged from Project 2.
+The purpose of this assignment was to extend Project 3’s replicated Two Phase Commit-enabled Key-Value store and replace the Two Phase Commit (2PC) functionality with the Paxos Protocol. This is because 2PC is not fault tolerant, where it will stall indefinitely in the event of a coordinator failure, whereas Paxos can still reach consensus in the event of a failed or unreachable node.
 
+In order to achieve a degree of fault tolerance in our distributed Key-Value system, we were required to implement the three Paxos roles discussed in class – Proposers, Acceptors, and Learners. These roles must function in the following ways:
+
+* Proposers: Initiate the consensus process by proposing a value provided by the client.
+
+* Acceptors: Respond to Proposer, validating the consensus process and ensuring agreement.
+
+* Learners: Learn the agreed upon value.
+
+An additional requirement was to simulate the failure of a server’s Acceptor role at a random time. The purpose of simulating Acceptor failure is to show how Paxos is designed to overcome server failures.
 
 
 ### Technical Impression:
-The process of implementing this project required a good understanding of the Two Phase Commit Protocol and some knowledge on replicating and coordinating operations between multiple server replicas. Replicating the servers themselves was straightforward, primarily requiring the modification of the _docker-compose_ file. In the _docker-compose_ file, all 5 servers and the 2PC Coordinator were configured in their own individual containers and given unique names in the form of the _SERVER_NAME_ environment variable. The _SERVER__NAME was used to bind the remote object’s reference to the registry, allowing the Coordinator and servers to establish RMI communication with one another by performing a registry lookup of the _SERVER_NAME_ they wish to communicate with.
+I chose to implement the Paxos Protocol such that each of the five replicated servers contain the functionality of all three Paxos roles: the Proposer, Acceptor, and Learner.
 
-Originally, I attempted to implement communication between my 5 replicated servers similarly to a peer-to-peer service. Where the specific server a transaction is first initiated on acts as the Coordinator for the Two Phase Commit Protocol, managing the Preparation and Commit phases of 2PC, and handling any Rollbacks or Aborts that may occur. I had intended on a peer-to-peer architecture to ensure close coupling of the 2PC Protocol with the server behavior and to reduce the amount of network communication between my Docker containers. However, I eventually landed on separating the 2PC Coordinator into its own class to reduce difficulty in debugging, centralize Coordinator-related logging, and facilitate the reusability and scalability of the Coordinator as a whole.
+I decided on this architecture as it makes the overall system more resilient in the event of Acceptor failures. Since each of the 5 servers act as an Acceptor, our system can handle up to 2 server failures at a given time and still maintain consensus.
 
-Implementing the Two Phase Commit Protocol was the most challenging part of the project, requiring a detailed and organized implementation to properly gain consensus across the replicas for PUT and DELETE operations. This 2PC algorithm here is implemented using RMI and is divided into 2 phases, the Prepare Phase and the Commit Phase.
+The main difficulty of this project stemmed from understanding and correctly implementing the Paxos protocol. I primarily had trouble managing the interactions between the Proposers, Acceptors, and Learners.
 
-In the Prepare Phase, the Coordinator sends Prepare requests to the replicas and receives acknowledgement (ACK) messages if the servers are prepared to move forward to commit the transaction. If any of the replicas do not send back an ACK message, the transaction cannot move forward and is aborted across all 5 replicas. Timeouts were implemented to prevent the stalling of a transaction, helping the server maintain a consistent, fail-free state.
+In my implementation, I broke down Paxos into the below phases:
 
-After successfully preparing all 5 replicas, the Coordinator moves on to the Commit Phase. Here, the Coordinator ensures that either all 5 servers successfully commit the result of the PUT/DELETE operation, or none of them do. If any of the replicas fail to commit the changes, the entire operation is rolled back across all 5 servers. Like with the Prepare Phase, timeouts were implemented to prevent the stalling of transactions.
+* Prepare Phase:
+
+  * Send a prepare message with a unique proposal number (proposalID) to all acceptors inquiring if a value has been previously accepted for a particular key during this specific Paxos round.
+
+  * If nothing was accepted for the key, the Acceptor returns a promise containing the current proposalID. If something has been accepted for the key, Acceptor returns a promise containing the previously accepted proposalID and previously accepted value, and the currently proposed changes for that key are discarded in favor of the previously accepted changes.
+
+* Promise Phase:
+
+  * Evaluate the returned promises from the acceptors. If a previously accepted value is returned for a specific key, the proposer will perform the operation associated with the previously accepted value.
+
+  * If no value has been accepted for a particular key, the proposer will perform the currently proposed operation.
+
+* Accept Phase:
+
+  * Acceptors attempt to ACCEPT the above value. If accepted by a majority of acceptors, the operation is propagated to all learners to be performed.
+
+Additionally, I allowed for concurrent operations to be performed on different keys. Where if an operation is Accepted for a specific key, any other operations on that specific key revert to the previously Accepted operation. But a different operation can be performed on another key.
+
+For example, if I perform a PUT: KeyA, ValueA operation and it is Accepted by a majority of Acceptors, no other operations can be done on KeyA in the current Paxos Round. Any other KeyA operations will default to the previously accepted operation, maintaining consistency.  However, another operation can be successfully performed on KeyB, for example, PUT: KeyB, ValueB is a valid operation that will successfully write KeyB to the K-V store.
+
+Also, the client can initiate a new Paxos run via the “Enter '5' to initiate a new Paxos run” dialog. This advances Paxos to a new round allowing you to run a new operation on a Key that previously had an Accepted operation. For example, on KeyA, you could now run a DELETE:KeyA operation.
+
+To implement the Acceptor failure requirement, the Acceptor methods were associated with an “active” boolean. Each server’s “active” boolean has a 20% chance to change from true to false, via a method run every 15 seconds. If an Acceptor “fails”, it is reinitialized after 15 seconds. In the event of an Acceptor failure, any requests sent to that server’s Acceptor methods are automatically REJECTED. In the event of an Acceptor failure or Acceptor recovery, you will receive a log message indicating so.
