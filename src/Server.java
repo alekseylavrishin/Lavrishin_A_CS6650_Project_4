@@ -7,6 +7,9 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Keeps track of the state of the Paxos environment for a single Paxos run.
@@ -29,7 +32,7 @@ public class Server implements RemoteOperations{
     private static ArrayList<RemoteOperations> serverRefs = new ArrayList<>();
     private int proposalID; // Proposer ID for new proposers
     private boolean active = true; // Simulates the failure of an Acceptor
-
+    private static ScheduledExecutorService acceptorFailure = Executors.newScheduledThreadPool(2);
     // Tracks the Paxos state of individual keys. Can be cleared to simulate a new Paxos run.
     private ConcurrentHashMap<String, PaxosState> paxosStateMap = new ConcurrentHashMap<>();
 
@@ -182,20 +185,25 @@ public class Server implements RemoteOperations{
     @Override
     public synchronized String prepare(int proposalID, String key) throws RemoteException {
         try {
-            PaxosState state = paxosStateMap.computeIfAbsent(key, k -> new PaxosState());
-            if (proposalID > state.highestPromisedID) {
-                state.highestPromisedID = proposalID;
-                if(state.acceptedProposalID == -1) { // If PAXOS instance has not previously accepted a value
-                    logMessage("Promise ID " + state.highestPromisedID);
-                    return "PROMISE," + state.highestPromisedID + "," + "null";
+            if (!active) { // Simulates if Acceptor fails
+                logMessage("ACCEPTOR FAILURE: " + getServerName() + " is inactive. Rejecting PREPARE request.");
+                return "REJECT";
+            } else { // Simulates properly functioning Acceptor
+                PaxosState state = paxosStateMap.computeIfAbsent(key, k -> new PaxosState());
+                if (proposalID > state.highestPromisedID) {
+                    state.highestPromisedID = proposalID;
+                    if (state.acceptedProposalID == -1) { // If PAXOS instance has not previously accepted a value
+                        logMessage("Promise ID " + state.highestPromisedID);
+                        return "PROMISE," + state.highestPromisedID + "," + "null";
 
-                } else { // If PAXOS instance has previously accepted a value
-                    logMessage("PROMISE ID " + state.highestPromisedID + " accepted ID " + state.acceptedProposalID + " " + state.acceptedValue);
-                    return "PROMISE," + state.highestPromisedID + "," + state.acceptedProposalID + "," + state.acceptedValue;
+                    } else { // If PAXOS instance has previously accepted a value
+                        logMessage("PROMISE ID " + state.highestPromisedID + " accepted ID " + state.acceptedProposalID + " " + state.acceptedValue);
+                        return "PROMISE," + state.highestPromisedID + "," + state.acceptedProposalID + "," + state.acceptedValue;
+                    }
                 }
+                // Ignore if proposalID < highestPromisedID
+                return "REJECT";
             }
-            // Ignore if proposalID < highestPromisedID
-            return "REJECT";
         } catch (Exception e) {
             logMessage("ERROR: Issue in Acceptor's prepare method " + e.getMessage());
             return "REJECT";
@@ -213,18 +221,23 @@ public class Server implements RemoteOperations{
     @Override
     public synchronized String acceptRequest(int proposalID, String value, String key) throws RemoteException {
         try {
-            PaxosState state = paxosStateMap.computeIfAbsent(key, k -> new PaxosState());
-            if (proposalID >= state.highestPromisedID) { // if proposalID is the largest, accept the request
-                state.highestPromisedID = proposalID;
-                state.acceptedProposalID = proposalID; // Update proposalId to use for future PAXOS requests
-                state.acceptedValue = value;
+            if (!active){ // Simulates if Acceptor fails
+                logMessage("ACCEPTOR FAILURE: " + getServerName() + " is inactive. Rejecting ACCEPT request.");
+                return "REJECT";
+            } else { // Simulates properly functioning Acceptor
+                PaxosState state = paxosStateMap.computeIfAbsent(key, k -> new PaxosState());
+                if (proposalID >= state.highestPromisedID) { // if proposalID is the largest, accept the request
+                    state.highestPromisedID = proposalID;
+                    state.acceptedProposalID = proposalID; // Update proposalId to use for future PAXOS requests
+                    state.acceptedValue = value;
 
-                logMessage("ACCEPT ID " + proposalID + " value " + value);
-                return "ACCEPT," + proposalID + "," + value;
+                    logMessage("ACCEPT ID " + proposalID + " value " + value);
+                    return "ACCEPT," + proposalID + "," + value;
+                }
+                // Otherwise reject request
+                logMessage("REJECT ID " + proposalID + " value " + value);
+                return "REJECT," + proposalID + "," + value;
             }
-            // Otherwise reject request
-            logMessage("REJECT ID " + proposalID + " value " + value);
-            return "REJECT," + proposalID + "," + value;
         } catch (Exception e) {
             logMessage("ERROR: Issue in Acceptor's acceptRequest method " + e.getMessage());
             return "REJECT," + proposalID + "," + value;
@@ -256,6 +269,33 @@ public class Server implements RemoteOperations{
         } catch (Exception e) {
             logMessage("ERROR: Issue in Learner's learn method " + e.getMessage());
         }
+    }
+
+    /**
+     * Simulates an acceptor failure by having a 20% chance of changing the 'active' boolean to false.
+     * When the 'active' boolean is changed to false, the server's Acceptor methods (prepare, acceptRequest) will REJECT
+     *    a proposer's incoming request.
+     * This method runs every 15 seconds.
+     */
+    public void simulateAcceptorFailure() {
+        acceptorFailure.scheduleAtFixedRate(() -> {
+            try {
+                // Simulate failure on Acceptor
+                if (Math.random() < 0.2) { // Acceptor fails 20% of the time
+                    active = false;
+                    logMessage("Acceptor " + getServerName() + " has failed");
+                } else {
+                    // Recover the failed Acceptor
+                    if (!active) {
+                        active = true;
+                        logMessage("Acceptor " + getServerName() + " has recovered");
+                    }
+
+                }
+            } catch (Exception e) {
+                logMessage("ERROR: Issue in simulateAcceptorFailure()" + e.getMessage());
+            }
+        }, 5, 15, TimeUnit.SECONDS);
     }
 
     /**
@@ -475,6 +515,7 @@ public class Server implements RemoteOperations{
             logMessage("Server initialized on host " + System.getProperty("java.rmi.server.hostname") + " port " + port);
 
             connectToPaxosNodes(); // Connect to all PAXOS nodes
+            srv.simulateAcceptorFailure();
 
         } catch (Exception e) {
             logMessage("Failed to connect to PAXOS nodes: " + e.getMessage());

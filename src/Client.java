@@ -35,6 +35,8 @@ public class Client {
      * @param stub The reference to the RMI server
      */
     public static void testOperations(String serverIP, RemoteOperations stub) throws RemoteException {
+        initiateNewPaxosRun(stub);
+
         // Programmatically perform 5 PUT operations
         PUTOperation("Key1", "Value1", serverIP, stub);
         PUTOperation("Key2", "Value2", serverIP, stub);
@@ -49,12 +51,36 @@ public class Client {
         GETOperation("Key4", serverIP, stub);
         GETOperation("Key5", serverIP, stub);
 
+        // Attempt to PUT again - this will fail
+        PUTOperation("Key1", "UpdatedValue1", serverIP, stub);
+        PUTOperation("Key2", "UpdatedValue2", serverIP, stub);
+        PUTOperation("Key3", "UpdatedValue3", serverIP, stub);
+        PUTOperation("Key4", "UpdatedValue4", serverIP, stub);
+        PUTOperation("Key5", "UpdatedValue5", serverIP, stub);
+
+        // Initiate new Paxos round allowing for new operations on the KV pairs
+        initiateNewPaxosRun(stub);
+
+        // Attempt to run PUT again - this will work
+        PUTOperation("Key1", "UpdatedValue1", serverIP, stub);
+        PUTOperation("Key2", "UpdatedValue2", serverIP, stub);
+        PUTOperation("Key3", "UpdatedValue3", serverIP, stub);
+        PUTOperation("Key4", "UpdatedValue4", serverIP, stub);
+        PUTOperation("Key5", "UpdatedValue5", serverIP, stub);
+
+        // Initiate new Paxos round allowing for new operations on the KV pairs
+        initiateNewPaxosRun(stub);
+
+
         // Programmatically perform 5 DELETE operations
         DELETEOperation("Key1", serverIP, stub);
         DELETEOperation("Key2", serverIP, stub);
         DELETEOperation("Key3", serverIP, stub);
         DELETEOperation("Key4", serverIP, stub);
         DELETEOperation("Key5", serverIP, stub);
+
+        // Initiate new Paxos round allowing for new operations on the KV pairs
+        initiateNewPaxosRun(stub);
 
         // Programmatically populate RMI server with 5 key/value pairs
         PUTOperation("Key1", "Value1", serverIP, stub);
@@ -152,7 +178,8 @@ public class Client {
             } else if (selection == 5) {
                 initiateNewPaxosRun(stub);
 
-            } else { // rerun function if input not '1', '2', '3', '4', or '5'
+            }
+            else { // rerun function if input not '1', '2', '3', '4', '5'
                 logMessage("Invalid input detected");
                 askForOperationType(scanner, stub, serverIP);
             }
@@ -164,7 +191,11 @@ public class Client {
         }
     }
 
-
+    /**
+     * Initiates a new Paxos round on the RMI servers. Allowing for previously accepted values to be overwritten.
+     * @param stub The reference to the RMI server.
+     * @throws RemoteException For RMI-related errors.
+     */
     public static void initiateNewPaxosRun(RemoteOperations stub) throws RemoteException {
         String result = stub.initiateNewPaxosRun();
         logMessage(result);
